@@ -61,6 +61,49 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ---
 
+## Data pipeline: how selections and variables are built (this repo)
+
+This section matches the **R scripts** in `scripts/` and `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+
+### 1. Per-year modeling Parquet (`meps_fyc_{year}_for_modeling.parquet`)
+
+**Script:** `scripts/process_meps_for_modeling.R` (optional first argument `--download`).
+
+1. For each calendar year **2019–2023**, the script maps the year to MEPS PUF prefix **`h216` / `h224` / `h233` / `h243` / `h251`** and downloads **`https://meps.ahrq.gov/data_files/pufs/{puf}/{puf}dta.zip`** when `--download` is passed or the zip is missing.
+2. The zip is unpacked under **`data/raw/stata/{puf}/`**; the **`.dta`** file is read with **`haven::read_dta`** into an R `data.frame`.
+3. **Competition exclusions** are resolved with **`meps_expanded_exclusion_names()`** in `R/meps_competition_exclusions.R`: stems from codebook **Section 2.5.11** (charges, utilization, expenditure totals and components, etc.) are expanded with year suffixes **`19`–`23`**, plus **`PERWTyyF`**, **`VARSTR`**, **`VARPSU`**, and **`BRR1`–`BRR128`** for each `yy`. Any column whose name appears in that expanded set is **dropped**, **except** the year’s expenditure total used as the target: **`TOTEXP{yy}`** (e.g. `TOTEXP23`), which is **kept**.
+4. The script checks that no survey-design columns remain via **`meps_survey_design_present()`**; if any leak through, it **stops**.
+5. The result is written to **`data/processed/meps_fyc_{year}_for_modeling.parquet`**. **`processing_manifest.json`** records row count, column count, and paths.
+
+### 2. Pooled table (`meps_fyc_2019_2023_pooled_for_modeling.parquet`)
+
+**Script:** `scripts/pool_meps_parquets.R`.
+
+1. Reads each yearly Parquet from **`data/processed/`**.
+2. For each year, renames columns with **`meps_harmonize_names(df, yy)`**: any column name that **ends with the two-digit year** `yy` has that suffix **stripped** (so `TOTEXP23` becomes **`TOTEXP`**, and other variables align across years). Duplicate names after harmonization cause a **hard stop**.
+3. Adds **`FYC_YEAR`** (calendar year) as an integer column and column-binds all years with **`dplyr::bind_rows`**.
+4. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** and **`data/processed/pooling_manifest.json`** (`target_column`: **`TOTEXP`**, `year_indicator_column`: **`FYC_YEAR`**).
+
+### 3. Selection sample and PCA columns (`selection_data.parquet`)
+
+**Script:** `scripts/build_selection_data.R`. Defaults can be overridden with environment variables **`SEED`**, **`N_ROW`**, **`N_PC`** (defaults **`42`**, **`10000`**, **`220`**).
+
+1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
+2. **Row selection:** `set.seed(SEED)` then **`sample.int(nrow(pooled), N_ROW)`** without replacement. Those row indices subset the pooled table.
+3. **Columns for PCA:** All columns **except** **`TOTEXP`** and **`FYC_YEAR`**. From that set, **only numeric** columns are kept (`vapply(..., is.numeric)`).
+4. **Near-constant columns removed:** For each remaining column, **sample standard deviation** is computed with `NA` removed; columns with **`sd ≤ 1e-10`** (or non-finite `sd`) are dropped.
+5. **Missing values:** The matrix is coerced to `double`. **Column medians** are used as imputates: `NA` entries are replaced by that column’s median (using **`matrixStats::colMedians`** if that package is available, otherwise **`apply(..., median)`**).
+6. **PCA:** **`irlba::prcomp_irlba`** on the \(n \times p\) matrix with **`center = TRUE`**, **`scale. = TRUE`**, **`n = min(N_PC, p, max(2, nrow(X) - 1))`**, **`retx = TRUE`**, **`maxit = 300`**. Column names of the score matrix are set to **`PC1`**, **`PC2`**, … up to the number of components actually extracted.
+7. **Output:** A table **`cbind(PC scores, TOTEXP = …, FYC_YEAR = …)`** written to **`data/processed/selection_data.parquet`**. **Only scores are stored**; the **`rotation`** matrix (loadings of original harmonized predictors on each PC) is **not** written to any file by this script.
+
+**Caveat:** PCA is fit **on the random 10k rows only**. For competition-style CV that avoids leakage, you would fit PCA **inside each training fold** and apply the fold’s rotation to validation rows.
+
+### 4. CV summaries and `CV_RMSE_RESULTS.md`
+
+Scripts such as **`scripts/run_lasso_elasticnet_selection.R`**, **`scripts/run_regression_tree_selection.R`**, and **`scripts/run_rf_xgb_selection.R`** read **`selection_data.parquet`**, take **`PC*`** columns as predictors and **`TOTEXP`** as the response (levels/dollars unless the script states otherwise), and write JSON metrics under **`data/processed/`**. **`scripts/build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`** as a **results table only** (no enumerated list of PC names); see this README for how **`PC1`–`PC220`** are defined.
+
+---
+
 ## Suggested workflow (step by step)
 
 1. **Governance & repo**  

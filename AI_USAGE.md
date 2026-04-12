@@ -168,6 +168,64 @@
 
 ---
 
+## 2026-04-12 — Build `selection_data.parquet` (10k rows, 220 PCs)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Random subsample 10,000 rows with 220 PCA features (≥90% context), dataset named selection data.
+- **Output summary:** Added **`scripts/build_selection_data.R`**: reads pooled Parquet, **`sample.int`** **10,000** rows (`SEED=42`), numeric predictors excluding **`TOTEXP`/`FYC_YEAR`**, median impute, **`irlba::prcomp_irlba`** with **`n=220`**, writes **`data/processed/selection_data.parquet`** (**10,000 × 222**: `PC1`…`PC220`, `TOTEXP`, `FYC_YEAR`). Ran successfully (~**103 s**). Updated **`data/README.md`**.
+- **What I used:** Env **`N_ROW`**, **`N_PC`**, **`SEED`** to override. For strict CV, fit PCA inside training folds only.
+- **Verification:** Script exit 0; output **10000 × 222**.
+
+---
+
+## 2026-04-12 — Lasso + elastic net CV RMSE on `selection_data`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run lasso and elastic net and give CV RMSE.
+- **Output summary:** Added **`scripts/run_lasso_elasticnet_selection.R`**: reads **`selection_data.parquet`**, **`cv.glmnet`** on **PC1–PC220** vs **`TOTEXP`** (levels), **`nfolds=10`**, **`type.measure="mse"`**, reports **`cv_rmse = sqrt(cvm)`** at **`lambda.min`** for **lasso (`alpha=1`)** and **elastic net (`alpha=0.5`)**. Ran locally: **lasso CV RMSE ≈ 16369**, **elastic net CV RMSE ≈ 16343** (dollars); runtime ~**9.5 s**. Wrote **`data/processed/selection_lasso_elasticnet_cv.json`**. Updated **`data/README.md`**.
+- **What I used:** For competition-aligned error, repeat with **`log1p(TOTEXP)`** or report RMSLE-style metric separately.
+- **Verification:** `Rscript scripts/run_lasso_elasticnet_selection.R` exit 0.
+
+---
+
+## 2026-04-12 — Elastic net: five alphas, CV RMSE each (`selection_data`)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run elastic net for different lambda and alphas, five combinations, report RMSE.
+- **Output summary:** Replaced **`scripts/run_lasso_elasticnet_selection.R`** with a **five-α grid** **(0, 0.25, 0.5, 0.75, 1)**; for each **`cv.glmnet`** (10-fold, MSE) picks **`lambda.min`** and reports **`cv_rmse_levels` = sqrt(CV MSE)**. Output **`data/processed/selection_elasticnet_alpha_grid_cv.json`**. Example run: best CV RMSE among these ≈ **16331** at **α=0.5**, **`λ≈144`**. **`data/README.md`** updated (old JSON name **`selection_lasso_elasticnet_cv.json`** superseded).
+- **What I used:** λ is **not** fixed manually—glmnet’s CV path selects **`lambda.min`** per α (standard use).
+- **Verification:** Script exit 0 in ~**19 s**.
+
+---
+
+## 2026-04-12 — Regression tree CV + `CV_RMSE_RESULTS.md`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run one regression tree model and create a table or Markdown file recording previous CV RMSE results.
+- **Output summary:** Added **`scripts/run_regression_tree_selection.R`**: **`rpart::rpart`** (anova) on **`selection_data.parquet`** (**PC1–PC220** → **`TOTEXP`**), **10-fold** CV, **`minsplit=30`**, **`minbucket=10`**, **`cp=0.001`**, **`maxdepth=30`**. Wrote **`data/processed/selection_rpart_cv.json`** (example run: **mean CV RMSE ≈ 19,622** dollars, **~96 s**). Added **`scripts/build_cv_rmse_results_md.R`** to assemble **`CV_RMSE_RESULTS.md`** from **`selection_elasticnet_alpha_grid_cv.json`**, optional **`selection_lasso_elasticnet_cv.json`**, **`selection_rpart_cv.json`**, and **`linear_baseline_metrics.json`** if present.
+- **What I used:** Re-run **`Rscript scripts/build_cv_rmse_results_md.R`** after new JSON metrics appear; re-run the tree script if **`selection_data.parquet`** changes.
+- **Verification:** `Rscript scripts/run_regression_tree_selection.R` and `Rscript scripts/build_cv_rmse_results_md.R` exit 0; **`CV_RMSE_RESULTS.md`** lists glmnet grid, legacy lasso/EN rows, and rpart row.
+
+---
+
+## 2026-04-12 — List all 220 PC predictors in `CV_RMSE_RESULTS.md` *(superseded)*
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) In the CV RMSE results file, also write down all 220 variables used.
+- **Output summary:** *(Later reverted; see next section.)* Previously appended a fenced **`PC1`–`PC220`** list via **`build_cv_rmse_results_md.R`**.
+
+---
+
+## 2026-04-12 — README data pipeline + remove PC lists from `CV_RMSE_RESULTS.md`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) If loadings are not saved, remove all PC lists from the CV RMSE markdown; document exactly how selections and variables were built in **`README.md`**; commit and push.
+- **Output summary:** Removed the **Predictor variables** block from **`CV_RMSE_RESULTS.md`** and from **`scripts/build_cv_rmse_results_md.R`** (replaced with a pointer to **`README.md`**). Added **`## Data pipeline: how selections and variables are built (this repo)`** to **`README.md`**: per-year processing, pooling/harmonization, **`build_selection_data.R`** steps (sample, numeric filter, `sd` filter, median impute, **`irlba::prcomp_irlba`**), explicit note that **rotation is not saved**, and how CV MD is assembled. Committed and pushed to **`main`**.
+- **What I used:** PCA loadings remain unavailable unless **`build_selection_data.R`** is extended to persist **`rotation`**.
+- **Verification:** `git push` succeeds; **`CV_RMSE_RESULTS.md`** contains tables only.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
