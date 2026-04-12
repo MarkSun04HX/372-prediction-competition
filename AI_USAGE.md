@@ -286,6 +286,16 @@
 
 ---
 
+## 2026-04-12 — XGB holdout grid: CSV + RMSE table in CV_RMSE_RESULTS
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Predict on the test set for **different XGBoost parameters** and **record their RMSE**.
+- **Output summary:** **`run_xgb_tune_holdout.R`**: default grid expanded to **36** configs (**nrounds** × **max_depth** × **η**); **`XGB_GRID=large`** adds **320** configs (more **subsample** / **colsample_bytree**). Writes **`xgb_tuning_holdout_rmse.csv`** (sorted by test RMSE) alongside JSON. **`build_cv_rmse_results_md.R`** adds subsection **XGBoost — holdout** with a markdown table of rank / params / **test RMSE** / train RMSE / test RMSLE / seconds. **`data/README.md`** and **`scripts/tuning/README.md`** updated.
+- **What I used:** After tuning: **`Rscript scripts/tuning/build_cv_rmse_results_md.R`** to refresh **`CV_RMSE_RESULTS.md`**.
+- **Verification:** `build_cv_rmse_results_md.R` exit 0; holdout section shows placeholder until **`xgb_tuning_holdout.json`** exists locally.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

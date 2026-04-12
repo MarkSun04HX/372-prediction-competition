@@ -9,7 +9,8 @@
 | `processed/selection_train.parquet` / `selection_test.parquet` | **Holdout split (default):** **10,000** train + **2,000** test rows; PCA (`irlba`) fit **on train only**, test PCs via `predict`. Built by `scripts/tuning/build_selection_data.R` (parquet gitignored). |
 | `processed/selection_data.parquet` | **Training slice copy** (same as `selection_train` when using defaults) for scripts that still read `selection_data.parquet` only. |
 | `processed/selection_train_test_manifest.json` | Row counts, `N_PC`, paths for the selection build. |
-| `processed/xgb_tuning_holdout.json` | XGBoost grid results on train / test PCs from `run_xgb_tune_holdout.R` (optional). |
+| `processed/xgb_tuning_holdout.json` | XGBoost grid: each hyperparameter set → test **RMSE** / RMSLE (`run_xgb_tune_holdout.R`). |
+| `processed/xgb_tuning_holdout_rmse.csv` | Same grid as a **CSV** (sorted by test RMSE). Use `XGB_GRID=large` for a bigger search. |
 | `processed/holdout_test_predictions.parquet` | One row per test person: **`TOTEXP_true`**, **`TOTEXP_pred`**, **`FYC_YEAR`** — from `run_holdout_predict_pcs.R` (220 PCs → model → 2000 predictions). |
 | `reference/` | Optional downloaded docs, etc. |
 
@@ -61,7 +62,7 @@ Outputs: `selection_train.parquet`, `selection_test.parquet`, `selection_data.pa
 Rscript scripts/tuning/run_xgb_tune_holdout.R
 ```
 
-Writes `processed/xgb_tuning_holdout.json`. **Direct PC → test predictions (2000 rows):**
+Writes `processed/xgb_tuning_holdout.json` and **`xgb_tuning_holdout_rmse.csv`**. Optional **`XGB_GRID=large`** for more parameter combinations. Then refresh **`CV_RMSE_RESULTS.md`**: `Rscript scripts/tuning/build_cv_rmse_results_md.R`. **Direct PC → test predictions (2000 rows):**
 
 ```bash
 Rscript scripts/tuning/run_holdout_predict_pcs.R

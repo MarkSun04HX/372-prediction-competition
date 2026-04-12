@@ -2,7 +2,14 @@
 # Tune XGBoost on selection_train.parquet; evaluate RMSE / RMSLE on selection_test.parquet
 # (no k-fold CV — fixed holdout from build_selection_data.R).
 #
-# Usage: Rscript scripts/tuning/run_xgb_tune_holdout.R
+# Usage:
+#   Rscript scripts/tuning/run_xgb_tune_holdout.R
+#   XGB_GRID=large Rscript scripts/tuning/run_xgb_tune_holdout.R   # bigger hyperparameter grid
+#
+# Writes:
+#   data/processed/xgb_tuning_holdout.json
+#   data/processed/xgb_tuning_holdout_rmse.csv  (sorted by test RMSE)
+#
 # Requires: data/processed/selection_train.parquet and selection_test.parquet
 
 suppressPackageStartupMessages({
@@ -44,21 +51,35 @@ rmsle <- function(y, pred) {
   sqrt(mean((log1p(pred) - log1p(y))^2))
 }
 
-# Default grid (edit in script or duplicate file to customize); objective reg:squarederror
-grid <- expand.grid(
-  nrounds = c(200L, 350L),
-  max_depth = c(4L, 5L, 6L),
-  eta = c(0.06, 0.1),
-  subsample = 0.8,
-  colsample_bytree = 0.8,
-  stringsAsFactors = FALSE
-)
+# Hyperparameter grids (objective reg:squarederror; subsample/colsample often fixed for speed)
+if (identical(Sys.getenv("XGB_GRID", unset = "default"), "large")) {
+  grid <- expand.grid(
+    nrounds = c(150L, 250L, 400L, 600L),
+    max_depth = c(3L, 4L, 5L, 6L, 8L),
+    eta = c(0.03, 0.06, 0.1, 0.15),
+    subsample = c(0.7, 0.9),
+    colsample_bytree = c(0.7, 0.9),
+    stringsAsFactors = FALSE
+  )
+} else {
+  # Default: 36 configs — nrounds × max_depth × eta
+  grid <- expand.grid(
+    nrounds = c(150L, 250L, 400L),
+    max_depth = c(3L, 4L, 5L, 6L),
+    eta = c(0.04, 0.07, 0.1),
+    subsample = 0.8,
+    colsample_bytree = 0.8,
+    stringsAsFactors = FALSE
+  )
+}
+message("Grid size: ", nrow(grid), " (set XGB_GRID=large for a bigger grid)")
 
 nthread <- max(1L, parallel::detectCores() - 1L)
 results <- vector("list", nrow(grid))
 t_all <- proc.time()
 
 for (i in seq_len(nrow(grid))) {
+  if (i == 1L || i %% 5L == 0L) message("Config ", i, " / ", nrow(grid))
   g <- grid[i, , drop = FALSE]
   dtr <- xgboost::xgb.DMatrix(tr$X, label = tr$y)
   dte <- xgboost::xgb.DMatrix(te$X, label = te$y)
@@ -112,6 +133,7 @@ out <- list(
   nthread = nthread,
   grid_rows_evaluated = nrow(grid),
   total_elapsed_seconds = elapsed_total,
+  output_csv = "data/processed/xgb_tuning_holdout_rmse.csv",
   best_by_test_RMSE_levels = best,
   results_sorted_by_test_RMSE = res_sorted
 )
@@ -119,5 +141,9 @@ out <- list(
 out_json <- file.path(root, "data", "processed", "xgb_tuning_holdout.json")
 jsonlite::write_json(out, out_json, auto_unbox = TRUE, pretty = TRUE)
 
+out_csv <- file.path(root, "data", "processed", "xgb_tuning_holdout_rmse.csv")
+utils::write.csv(tab, out_csv, row.names = FALSE)
+
 message(jsonlite::toJSON(out, auto_unbox = TRUE, pretty = TRUE))
 message("\nWrote ", out_json)
+message("Wrote ", out_csv, " (test RMSE sorted ascending)")

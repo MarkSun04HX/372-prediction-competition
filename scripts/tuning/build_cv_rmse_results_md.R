@@ -157,6 +157,63 @@ if (!is.null(rbx) && !is.null(rbx$xgboost)) {
   )
 }
 
+xh <- read_json_safe("xgb_tuning_holdout.json")
+lines <- c(
+  lines,
+  "",
+  "### XGBoost — holdout: test RMSE by hyperparameters (2k test rows)",
+  "",
+  "Train on **`selection_train.parquet`**, score **`selection_test.parquet`** (same **220 PCs**). Not 10-fold CV. Regenerate: `Rscript scripts/tuning/run_xgb_tune_holdout.R` (`XGB_GRID=large` optional). CSV: **`data/processed/xgb_tuning_holdout_rmse.csv`**.",
+  "",
+  "| rank | nrounds | max_depth | η | subsample | colsample_bt | **test RMSE ($)** | train RMSE | test RMSLE | s |",
+  "|-----:|--------:|----------:|--:|-----------:|-------------:|-----------------:|-----------:|-----------:|--:|"
+)
+
+if (!is.null(xh) && !is.null(xh$results_sorted_by_test_RMSE)) {
+  rs <- xh$results_sorted_by_test_RMSE
+  if (is.data.frame(rs)) {
+    for (k in seq_len(nrow(rs))) {
+      r <- as.list(rs[k, , drop = FALSE])
+      if (is.null(r$RMSE_test_levels)) next
+      lines <- c(
+        lines,
+        sprintf(
+          "| %d | %s | %s | %s | %s | %s | **%.2f** | %.2f | %.5f | %.1f |",
+          k,
+          r$nrounds, r$max_depth, r$eta, r$subsample, r$colsample_bytree,
+          as.numeric(r$RMSE_test_levels),
+          as.numeric(r$RMSE_train_levels),
+          as.numeric(r$RMSLE_test_log1p),
+          as.numeric(r$elapsed_seconds)
+        )
+      )
+    }
+  } else {
+    if (!is.list(rs)) rs <- list(rs)
+    for (k in seq_along(rs)) {
+      r <- rs[[k]]
+      if (is.null(r$RMSE_test_levels)) next
+      lines <- c(
+        lines,
+        sprintf(
+          "| %d | %s | %s | %s | %s | %s | **%.2f** | %.2f | %.5f | %.1f |",
+          k,
+          r$nrounds, r$max_depth, r$eta, r$subsample, r$colsample_bytree,
+          as.numeric(r$RMSE_test_levels),
+          as.numeric(r$RMSE_train_levels),
+          as.numeric(r$RMSLE_test_log1p),
+          as.numeric(r$elapsed_seconds)
+        )
+      )
+    }
+  }
+} else {
+  lines <- c(
+    lines,
+    "| — | — | — | — | — | — | — | — | — | *no `xgb_tuning_holdout.json` — run `Rscript scripts/tuning/run_xgb_tune_holdout.R`* |"
+  )
+}
+
 lines <- c(
   lines,
   "",

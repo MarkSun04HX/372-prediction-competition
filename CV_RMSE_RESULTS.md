@@ -38,6 +38,14 @@ Target: **`TOTEXP`** (dollars, levels). Predictors: **`PC1`–`PC220`** from `se
 | Random forest (`ranger`) | skipped (`SKIP_RF=1`); 300 trees, mtry=min(50,p), min.node.size=3 | — | `scripts/tuning/run_rf_xgb_selection.R` |
 | XGBoost | nrounds=200, max_depth=4, η=0.08, subsample=0.8, colsample_bytree=0.8; 10-fold CV | **16256.02** | **445.6** s — `SKIP_RF=1 Rscript scripts/tuning/run_rf_xgb_selection.R` (XGB only) or omit `SKIP_RF` for RF+XGB |
 
+### XGBoost — holdout: test RMSE by hyperparameters (2k test rows)
+
+Train on **`selection_train.parquet`**, score **`selection_test.parquet`** (same **220 PCs**). Not 10-fold CV. Regenerate: `Rscript scripts/tuning/run_xgb_tune_holdout.R` (`XGB_GRID=large` optional). CSV: **`data/processed/xgb_tuning_holdout_rmse.csv`**.
+
+| rank | nrounds | max_depth | η | subsample | colsample_bt | **test RMSE ($)** | train RMSE | test RMSLE | s |
+|-----:|--------:|----------:|--:|-----------:|-------------:|-----------------:|-----------:|-----------:|--:|
+| — | — | — | — | — | — | — | — | — | *no `xgb_tuning_holdout.json` — run `Rscript scripts/tuning/run_xgb_tune_holdout.R`* |
+
 ## Pooled data (full PCs / many columns)
 
 | Model | Configuration | CV RMSE | Notes |
