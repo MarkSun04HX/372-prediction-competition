@@ -98,6 +98,16 @@
 
 ---
 
+## 2026-04-12 — Git commit and push (MEPS R pipeline)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Commit and push for me.
+- **Output summary:** Staged **R pipeline** (`R/`, `scripts/*.R`), **config**, **data** README + **JSON manifests** (Parquet outputs remain gitignored), **legacy/python**, **`.gitignore`**, **`.cursor/rules/ai-usage-log.mdc`**, **README** / **AI_USAGE** updates. Committed as **`e7887db`** with message describing R MEPS processing, exclusions, docs, and Python legacy move. Pushed **`main`** to **`origin`** (`https://github.com/MarkSun04HX/372-prediction-competition.git`). Course PDF was already tracked; not re-staged.
+- **What I used:** Clone teammates pull `main`; large **`.parquet`** / **`.dta`** / **`.zip`** stay local per `.gitignore`.
+- **Verification:** `git push` reported `main -> main` successfully.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
