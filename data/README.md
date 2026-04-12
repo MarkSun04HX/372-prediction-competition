@@ -3,7 +3,7 @@
 | Path | Purpose |
 |------|---------|
 | `raw/ascii/` | Optional local MEPS **ASCII** `.dat` (not in git; often **deleted** after building Parquet to save disk). |
-| `raw/stata_zips/` | Downloaded **Stata** zips from MEPS when you run `process_meps_for_modeling.R --download` (safe to delete after processing). |
+| `raw/stata_zips/` | Downloaded **Stata** zips from MEPS when you run `Rscript scripts/setup.R process-meps --download` (safe to delete after processing). |
 | `raw/stata/` | Extracted `.dta` trees (safe to delete after processing). |
 | `processed/` | **`meps_fyc_{2019..2023}_for_modeling.parquet`** — per-year tables (competition exclusions applied; **`PERWTyyF`**, **`VARSTR`**, **`VARPSU`**, **`BRR*`** removed). **`meps_fyc_2019_2023_pooled_for_modeling.parquet`** — all years **stacked** with calendar-year suffixes stripped (`TOTEXP` = target, `FYC_YEAR` = row source year). See `processing_manifest.json` and `pooling_manifest.json`. |
 | `processed/selection_data.parquet` | **Selection data:** **10,000** random rows from the pooled file, **`PC1`–`PC220`** from PCA (`irlba`) fit on that sample’s numeric predictors, plus **`TOTEXP`** and **`FYC_YEAR`**. Built by `scripts/tuning/build_selection_data.R` (gitignored like other `.parquet`). |
@@ -11,27 +11,27 @@
 
 ## Build modeling-ready Parquet (R)
 
-From the **repository root**, after `Rscript scripts/install_r_dependencies.R`:
+From the **repository root**, after `Rscript scripts/setup.R install`:
 
 ```bash
-Rscript scripts/process_meps_for_modeling.R --download   # first run / refresh zips
-Rscript scripts/process_meps_for_modeling.R              # reuse zips in raw/stata_zips
+Rscript scripts/setup.R process-meps --download   # first run / refresh zips
+Rscript scripts/setup.R process-meps              # reuse zips in raw/stata_zips
 ```
 
 Outputs: `processed/meps_fyc_2019_for_modeling.parquet` … `2023`, plus `processed/processing_manifest.json`.
 
-To **save disk space** after Parquet exists, you may **delete** everything under `data/raw/` except the empty `.gitkeep` placeholders (or remove the whole tree; `process_meps_for_modeling.R --download` will recreate it).
+To **save disk space** after Parquet exists, you may **delete** everything under `data/raw/` except the empty `.gitkeep` placeholders (or remove the whole tree; `Rscript scripts/setup.R process-meps --download` will recreate it).
 
 **Pool all years:**
 
 ```bash
-Rscript scripts/pool_meps_parquets.R
+Rscript scripts/setup.R pool
 ```
 
 **Baseline linear models (ridge + RMSE):**
 
 ```bash
-Rscript scripts/run_linear_baselines.R
+Rscript scripts/setup.R linear-baselines
 ```
 
 **PCA dimension check** (correlation eigenvalues on a Parquet **head** slice; fast):

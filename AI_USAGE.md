@@ -256,6 +256,16 @@
 
 ---
 
+## 2026-04-12 — Consolidate non-tuning scripts into `scripts/setup.R`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Place current non-tuning scripts into a single **`setup.R`** if possible.
+- **Output summary:** Added **`scripts/setup.R`** with subcommands **`install`**, **`expand-exclusions`**, **`process-meps`** (optional **`--download`**), **`pool`**, **`linear-baselines`**, and **`help`**. Removed **`process_meps_for_modeling.R`**, **`pool_meps_parquets.R`**, **`expand_competition_exclusions.R`**, **`install_r_dependencies.R`**, **`run_linear_baselines.R`**. **`install`** now also checks **`rpart`**. Updated **`README.md`**, **`data/README.md`**, **`config/README.md`**, **`scripts/tuning/README.md`**, **`scripts/tuning/build_cv_rmse_results_md.R`** (pooled baseline hint), and regenerated **`CV_RMSE_RESULTS.md`**.
+- **What I used:** Run **`Rscript scripts/setup.R help`** for the command list.
+- **Verification:** `Rscript scripts/setup.R help` exit 0.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

@@ -178,7 +178,7 @@ if (!is.null(lb) && !is.null(lb$models)) {
     )
   }
 } else {
-  lines <- c(lines, "| glmnet ridge (pooled) | *(not in repo JSON — run `Rscript scripts/run_linear_baselines.R`)* | — | Parquet required |")
+  lines <- c(lines, "| glmnet ridge (pooled) | *(not in repo JSON — run `Rscript scripts/setup.R linear-baselines`)* | — | Parquet required |")
 }
 
 lines <- c(

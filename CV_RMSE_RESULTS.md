@@ -42,7 +42,7 @@ Target: **`TOTEXP`** (dollars, levels). Predictors: **`PC1`–`PC220`** from `se
 
 | Model | Configuration | CV RMSE | Notes |
 |-------|----------------|--------:|-------|
-| glmnet ridge (pooled) | *(not in repo JSON — run `Rscript scripts/run_linear_baselines.R`)* | — | Parquet required |
+| glmnet ridge (pooled) | *(not in repo JSON — run `Rscript scripts/setup.R linear-baselines`)* | — | Parquet required |
 
 Predictor construction for the selection-data rows is documented in **`README.md`** (section *Data pipeline*). PCA loadings are **not** written to disk in this repo.
 

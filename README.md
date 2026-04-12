@@ -31,7 +31,7 @@ Build a model that predicts **total healthcare spending per person per year** as
 
 Each year has a **codebook and documentation** on the same download page—read them before serious modeling.
 
-**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. **Modeling-ready tables** use official **Stata** PUFs via **`Rscript scripts/process_meps_for_modeling.R`** (add **`--download`** to fetch zips) → **`data/processed/meps_fyc_{year}_for_modeling.parquet`** and **`processing_manifest.json`**. Stack years with **`Rscript scripts/pool_meps_parquets.R`** → **`meps_fyc_2019_2023_pooled_for_modeling.parquet`**. Exclusion logic lives in **`R/meps_competition_exclusions.R`**; regenerate `config/excluded_columns_expanded.txt` with **`Rscript scripts/expand_competition_exclusions.R`**. Baseline ridge RMSE: **`Rscript scripts/run_linear_baselines.R`**. Install CRAN deps once: **`Rscript scripts/install_r_dependencies.R`**. See **`data/README.md`** and **`config/README.md`**. Optional **Python** mirror lives under **`legacy/python/`** (not required for the course).
+**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. **Modeling-ready tables** use official **Stata** PUFs via **`Rscript scripts/setup.R process-meps`** (add **`--download`** to fetch zips) → **`data/processed/meps_fyc_{year}_for_modeling.parquet`** and **`processing_manifest.json`**. Stack years with **`Rscript scripts/setup.R pool`** → **`meps_fyc_2019_2023_pooled_for_modeling.parquet`**. Exclusion logic lives in **`R/meps_competition_exclusions.R`**; regenerate `config/excluded_columns_expanded.txt` with **`Rscript scripts/setup.R expand-exclusions`**. Baseline ridge RMSE: **`Rscript scripts/setup.R linear-baselines`**. Install CRAN deps once: **`Rscript scripts/setup.R install`**. See **`data/README.md`** and **`config/README.md`**. Optional **Python** mirror lives under **`legacy/python/`** (not required for the course).
 
 **Test set note:** The instructor’s test set is a **random sample from MEPS in prior years**; **which years are not disclosed**. Plan for **cross-year generalization**: harmonize variable names (suffixes change with year), validate on held-out years when possible, and avoid overfitting a single year’s quirks.
 
@@ -63,11 +63,11 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ## Data pipeline: how selections and variables are built (this repo)
 
-This section matches the **R scripts** in `scripts/` (ETL) and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments), plus `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+This section matches **`scripts/setup.R`** (ETL and installs) and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments), plus `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
 
 ### 1. Per-year modeling Parquet (`meps_fyc_{year}_for_modeling.parquet`)
 
-**Script:** `scripts/process_meps_for_modeling.R` (optional first argument `--download`).
+**Command:** `Rscript scripts/setup.R process-meps` (optional trailing argument **`--download`**).
 
 1. For each calendar year **2019–2023**, the script maps the year to MEPS PUF prefix **`h216` / `h224` / `h233` / `h243` / `h251`** and downloads **`https://meps.ahrq.gov/data_files/pufs/{puf}/{puf}dta.zip`** when `--download` is passed or the zip is missing.
 2. The zip is unpacked under **`data/raw/stata/{puf}/`**; the **`.dta`** file is read with **`haven::read_dta`** into an R `data.frame`.
@@ -77,7 +77,7 @@ This section matches the **R scripts** in `scripts/` (ETL) and **`scripts/tuning
 
 ### 2. Pooled table (`meps_fyc_2019_2023_pooled_for_modeling.parquet`)
 
-**Script:** `scripts/pool_meps_parquets.R`.
+**Command:** `Rscript scripts/setup.R pool`.
 
 1. Reads each yearly Parquet from **`data/processed/`**.
 2. For each year, renames columns with **`meps_harmonize_names(df, yy)`**: any column name that **ends with the two-digit year** `yy` has that suffix **stripped** (so `TOTEXP23` becomes **`TOTEXP`**, and other variables align across years). Duplicate names after harmonization cause a **hard stop**.

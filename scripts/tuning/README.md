@@ -2,6 +2,8 @@
 
 Scripts here build **`data/processed/selection_data.parquet`**, run **CV on PC scores** vs **`TOTEXP`**, and regenerate **`CV_RMSE_RESULTS.md`**. Run from the **repository root**.
 
+**ETL, installs, pooling, baselines:** **`../setup.R`** (see `Rscript scripts/setup.R help`).
+
 | Script | Purpose |
 |--------|---------|
 | `build_selection_data.R` | 10k-row sample + PCA → `selection_data.parquet` |
@@ -11,4 +13,4 @@ Scripts here build **`data/processed/selection_data.parquet`**, run **CV on PC s
 | `run_rf_xgb_selection.R` | `ranger` + `xgboost` 10-fold CV → `selection_rf_xgb_cv.json` (`SKIP_RF=1` for XGB only) |
 | `build_cv_rmse_results_md.R` | Merge JSON metrics into root **`CV_RMSE_RESULTS.md`** |
 
-ETL scripts (`process_meps_for_modeling.R`, `pool_meps_parquets.R`, …) stay in **`scripts/`**.
+ETL and related commands are consolidated in **`scripts/setup.R`** (not in this folder).

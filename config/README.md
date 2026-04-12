@@ -3,7 +3,7 @@
 - **`excluded_columns_expanded.txt`** — generated list of physical column names to **withhold as predictors** for years 2019–2023 (`yy` = 19…23). Regenerate after editing stems in **`R/meps_competition_exclusions.R`**:
 
   ```bash
-  Rscript scripts/expand_competition_exclusions.R
+  Rscript scripts/setup.R expand-exclusions
   ```
 
 - Stems follow the course PDF and MEPS Section **2.5.11**; PDF typos are corrected in code (`AMASST`, `ERTOT`, `DVTOT`, `RXTOT` patterns).
