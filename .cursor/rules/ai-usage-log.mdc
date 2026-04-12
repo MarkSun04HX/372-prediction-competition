@@ -1,0 +1,15 @@
+---
+description: After substantive replies, append the user turn to AI_USAGE.md (project convention).
+alwaysApply: true
+---
+
+# AI usage logging (ECN372 prediction competition)
+
+When the user asks a **question** or makes a **request** that you answer in a non-trivial way (advice, code, edits, commands, research):
+
+1. **Update** `AI_USAGE.md` in the **same turn** (before finishing).
+2. Add a new `##` section: `## YYYY-MM-DD — <short title>`.
+3. Use these bullets: **Tool** (e.g. Cursor Agent), **Prompt** (paraphrased user message), **Output summary**, **What I used**, **Verification** (or `N/A`).
+4. **Skip** a new section for replies that are only thanks/ok with **no new task**; optional one-line note under a session block is enough.
+
+Do not wait for the user to remind you to log.

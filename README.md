@@ -31,6 +31,8 @@ Build a model that predicts **total healthcare spending per person per year** as
 
 Each year has a **codebook and documentation** on the same download page—read them before serious modeling.
 
+**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. **Modeling-ready tables** use official **Stata** PUFs via **`Rscript scripts/process_meps_for_modeling.R`** (add **`--download`** to fetch zips) → **`data/processed/meps_fyc_{year}_for_modeling.parquet`** and **`processing_manifest.json`**. Stack years with **`Rscript scripts/pool_meps_parquets.R`** → **`meps_fyc_2019_2023_pooled_for_modeling.parquet`**. Exclusion logic lives in **`R/meps_competition_exclusions.R`**; regenerate `config/excluded_columns_expanded.txt` with **`Rscript scripts/expand_competition_exclusions.R`**. Baseline ridge RMSE: **`Rscript scripts/run_linear_baselines.R`**. Install CRAN deps once: **`Rscript scripts/install_r_dependencies.R`**. See **`data/README.md`** and **`config/README.md`**. Optional **Python** mirror lives under **`legacy/python/`** (not required for the course).
+
 **Test set note:** The instructor’s test set is a **random sample from MEPS in prior years**; **which years are not disclosed**. Plan for **cross-year generalization**: harmonize variable names (suffixes change with year), validate on held-out years when possible, and avoid overfitting a single year’s quirks.
 
 ### 3. Target variable (predictand)
@@ -62,7 +64,7 @@ Each year has a **codebook and documentation** on the same download page—read 
 ## Suggested workflow (step by step)
 
 1. **Governance & repo**  
-   Agree on tools (Python/R), dependency management, folder layout, and how you will track decisions and [AI usage](AI_USAGE.md).
+   Use **R** for pipeline scripts; track decisions and [AI usage](AI_USAGE.md).
 
 2. **Download & inventory**  
    Pull **2019–2023** consolidated files; note **format** and **documentation** links for each year.
@@ -119,4 +121,4 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ## AI assistance
 
-This project records tool-assisted work in **[AI_USAGE.md](AI_USAGE.md)** (dated sections with **Tool / Prompt / Output summary / What I used / Verification**). Add a section whenever you use AI for nontrivial coding, analysis, or writing.
+This project records tool-assisted work in **[AI_USAGE.md](AI_USAGE.md)** (dated sections with **Tool / Prompt / Output summary / What I used / Verification**). The log’s **Convention (standing)** block describes how the assistant updates it each turn; project rule **`.cursor/rules/ai-usage-log.mdc`** reminds Cursor to append without you asking.

@@ -1,0 +1,16 @@
+# Local MEPS extracts (large)
+data/raw/**/*.dat
+data/raw/**/*.DAT
+data/raw/stata/**/*.dta
+data/raw/stata_zips/*.zip
+data/processed/*.parquet
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.Python
+venv/
+
+# Editor
+.DS_Store
