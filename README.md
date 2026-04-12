@@ -84,23 +84,27 @@ This section matches **`scripts/setup.R`** (ETL and installs) and **`scripts/tun
 3. Adds **`FYC_YEAR`** (calendar year) as an integer column and column-binds all years with **`dplyr::bind_rows`**.
 4. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** and **`data/processed/pooling_manifest.json`** (`target_column`: **`TOTEXP`**, `year_indicator_column`: **`FYC_YEAR`**).
 
-### 3. Selection sample and PCA columns (`selection_data.parquet`)
+### 3. Selection sample, train/test holdout, and PCA columns
 
-**Script:** `scripts/tuning/build_selection_data.R`. Defaults can be overridden with environment variables **`SEED`**, **`N_ROW`**, **`N_PC`** (defaults **`42`**, **`10000`**, **`220`**).
+**Script:** `scripts/tuning/build_selection_data.R`. Environment variables: **`SEED`** (default **`42`**), **`N_PC`** (default **`220`**), and either **`N_TRAIN`** / **`N_TEST`** or legacy **`N_ROW`**.
+
+**Default (holdout):** **`N_TRAIN=10000`**, **`N_TEST=2000`**. The script draws **`N_TRAIN + N_TEST`** distinct rows from the pooled file, randomly splits them into train and test, then:
 
 1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
-2. **Row selection:** `set.seed(SEED)` then **`sample.int(nrow(pooled), N_ROW)`** without replacement. Those row indices subset the pooled table.
-3. **Columns for PCA:** All columns **except** **`TOTEXP`** and **`FYC_YEAR`**. From that set, **only numeric** columns are kept (`vapply(..., is.numeric)`).
-4. **Near-constant columns removed:** For each remaining column, **sample standard deviation** is computed with `NA` removed; columns with **`sd ≤ 1e-10`** (or non-finite `sd`) are dropped.
-5. **Missing values:** The matrix is coerced to `double`. **Column medians** are used as imputates: `NA` entries are replaced by that column’s median (using **`matrixStats::colMedians`** if that package is available, otherwise **`apply(..., median)`**).
-6. **PCA:** **`irlba::prcomp_irlba`** on the \(n \times p\) matrix with **`center = TRUE`**, **`scale. = TRUE`**, **`n = min(N_PC, p, max(2, nrow(X) - 1))`**, **`retx = TRUE`**, **`maxit = 300`**. Column names of the score matrix are set to **`PC1`**, **`PC2`**, … up to the number of components actually extracted.
-7. **Output:** A table **`cbind(PC scores, TOTEXP = …, FYC_YEAR = …)`** written to **`data/processed/selection_data.parquet`**. **Only scores are stored**; the **`rotation`** matrix (loadings of original harmonized predictors on each PC) is **not** written to any file by this script.
+2. **Feature matrix (train):** All columns **except** **`TOTEXP`** and **`FYC_YEAR`**, **numeric** only, drop columns with **`sd ≤ 1e-10`**, median-impute **`NA`** using **train** column medians.
+3. **Feature matrix (test):** Same column set as train; median-impute **`NA`** using **those train medians** (no peeking at test distributions beyond the fixed column list).
+4. **PCA:** **`irlba::prcomp_irlba`** is fit **only on the training matrix** (`center = TRUE`, `scale. = TRUE`, **`n = min(N_PC, p, …)`**, **`maxit = 300`**). Test rows are projected with **`stats::predict(prcomp_object, newdata = …)`** so the test PCs use the **train** center, scale, and rotation.
+5. **Outputs:** **`selection_train.parquet`** and **`selection_test.parquet`** (each: **`PC*`**, **`TOTEXP`**, **`FYC_YEAR`**). **`selection_data.parquet`** is a **copy of the training table** so older scripts that expect a single `selection_data` file still see **10,000 train rows** only. **`selection_train_test_manifest.json`** records counts and paths.
 
-**Caveat:** PCA is fit **on the random 10k rows only**. For competition-style CV that avoids leakage, you would fit PCA **inside each training fold** and apply the fold’s rotation to validation rows.
+**Legacy single file:** set **`N_ROW=10000`** (and do not set a positive **`N_TEST`**) to sample **`N_ROW`** rows, run PCA on **all** of them, and write only **`selection_data.parquet`** (previous one-table behavior).
+
+**Only PC scores are stored**; PCA **loadings** are **not** written to disk.
+
+**Caveat:** The default holdout is **one random split**; metrics on the 2k test rows are **not** cross-validated. For model comparison, either repeat with different seeds or use nested CV if you need variance estimates.
 
 ### 4. CV summaries and `CV_RMSE_RESULTS.md`
 
-Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`**, take **`PC*`** columns as predictors and **`TOTEXP`** as the response (levels/dollars unless the script states otherwise), and write JSON metrics under **`data/processed/`**. **`scripts/tuning/build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`** as a **results table only** (no enumerated list of PC names); see this README for how **`PC1`–`PC220`** are defined.
+Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`** (training rows only when the holdout build was used), take **`PC*`** as predictors and **`TOTEXP`** as the response, and write JSON under **`data/processed/`**. **`run_xgb_tune_holdout.R`** fits and tunes **XGBoost** on **`selection_train.parquet`** and scores **`selection_test.parquet`** (no 10-fold loop). **`build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`**.
 
 ---
 

@@ -266,6 +266,16 @@
 
 ---
 
+## 2026-04-12 — Selection train/test (10k/2k) + XGB holdout tuning
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Hold out **2000** test rows from the pooled data; **10,000** train; avoid 10-fold CV for tuning; tune **XGBoost**.
+- **Output summary:** **`scripts/tuning/build_selection_data.R`** now defaults to **`N_TRAIN=10000`**, **`N_TEST=2000`**: one pooled draw of **12,000** rows, random split, **PCA on train only**, **`predict`** for test → **`selection_train.parquet`**, **`selection_test.parquet`**, **`selection_data.parquet`** (train copy), **`selection_train_test_manifest.json`**. Legacy **`N_ROW=...`** still produces a single **`selection_data.parquet`**. Added **`scripts/tuning/run_xgb_tune_holdout.R`**: default **12**-point grid of **`nrounds` × `max_depth` × `eta`**, fits on train, reports **test RMSE (levels)** and **test RMSLE** (`log1p`), writes **`data/processed/xgb_tuning_holdout.json`**. Updated **`README.md`** (data pipeline §3), **`data/README.md`**, **`scripts/tuning/README.md`**.
+- **What I used:** Re-run **`build_selection_data.R`** after changing **`SEED`** or split sizes; glmnet CV scripts still read **`selection_data.parquet`** (train only).
+- **Verification:** `Rscript -e 'parse(...)'` on new scripts.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
