@@ -296,6 +296,16 @@
 
 ---
 
+## 2026-04-12 — Ran XGB holdout grid (36 configs); committed metrics
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run the holdout XGB tuning and show the results.
+- **Output summary:** Ran **`Rscript scripts/tuning/run_xgb_tune_holdout.R`** then **`build_cv_rmse_results_md.R`** (~**41 min** wall time, **36** fits, **7** threads). Best **test RMSE (levels)** on **2k** holdout rows: **≈ 32,216** at **`nrounds=400`**, **`max_depth=3`**, **`η=0.07`** (train RMSE **≈ 6,940**; test RMSLE **≈ 3.09**). Wrote **`data/processed/xgb_tuning_holdout.json`**, **`xgb_tuning_holdout_rmse.csv`**, refreshed **`CV_RMSE_RESULTS.md`** holdout table. Committed those artifacts so the table is visible without re-running.
+- **What I used:** Holdout test RMSE is **not** comparable to the older **~16k** 10-fold CV figure on **`selection_data.parquet`** alone: here **train/test are disjoint** and **PCA was fit on train only**, so the **2k** test slice is a harder out-of-sample check than in-fold CV on PC scores.
+- **Verification:** `run_xgb_tune_holdout.R` exit 0; **`CV_RMSE_RESULTS.md`** lists ranks **1–36**.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
