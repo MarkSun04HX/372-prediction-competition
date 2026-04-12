@@ -74,9 +74,10 @@ Writes **`elasticnet_holdout.json`** and **`elasticnet_holdout_rmse.csv`**. Then
 ```bash
 Rscript scripts/tuning/run_holdout_predict_pcs.R
 # Ridge on PCs instead: MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R
+# Random forest (ranger), same defaults as CV script: MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R
 ```
 
-Writes `holdout_test_predictions.parquet` and `holdout_test_predictions.json`. Older glmnet / RF scripts still use **`selection_data.parquet`** (train rows only).
+Writes `holdout_test_predictions.parquet` + `.json` (XGB or glmnet), or **`holdout_test_predictions_rf.parquet`** + **`.json`** when **`MODEL=rf`**. Older glmnet / RF CV scripts still use **`selection_data.parquet`** (train rows only).
 
 **Lasso / elastic net CV RMSE** on `selection_data` (PCs only, `TOTEXP` in levels):
 

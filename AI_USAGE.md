@@ -316,6 +316,16 @@
 
 ---
 
+## 2026-04-12 — RF holdout vs XGB; train/test disjointness; AI log
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) **Record AI usage**; run **random forest** once on the **same PCs** as XGB and **compare test RMSE**; ask whether any of the **2000 test** rows can appear in the **50000 training** rows.
+- **Output summary:** Extended **`run_holdout_predict_pcs.R`** with **`MODEL=rf`** (**`ranger`**: **300** trees, **`mtry=min(50,p)`**, **`min.node.size=3`**, **`seed=42`**, same as **`run_rf_xgb_selection.R`**), writing **`holdout_test_predictions_rf.parquet`** / **`.json`** so default XGB outputs stay on **`holdout_test_predictions.*`**. Ran **`env MODEL=rf Rscript ...`**: **test RMSE ≈ 19,030** (vs **default XGB ≈ 17,640** on the same **2k** test with **50k** train PCs). **`data/README.md`** / **`scripts/tuning/README.md`** updated. Explained **no row overlap**: **`build_selection_data.R`** draws **`N_TRAIN+N_TEST`** distinct pooled indices, then splits into disjoint train and test subsets.
+- **What I used:** Same **`selection_train.parquet`** / **`selection_test.parquet`** as the prior default XGB holdout run; RF wall time **~10.5 min** on this machine (**~630 s** `real`).
+- **Verification:** `MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R` exit **0**; JSON metrics in **`holdout_test_predictions_rf.json`**.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

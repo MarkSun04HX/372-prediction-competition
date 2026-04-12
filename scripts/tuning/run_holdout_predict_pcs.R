@@ -5,6 +5,7 @@
 # Usage:
 #   Rscript scripts/tuning/run_holdout_predict_pcs.R
 #   MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R   # ridge glmnet on PCs
+#   MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R     # ranger (same defaults as run_rf_xgb_selection.R)
 #   MODEL=xgb NROUNDS=350 MAX_DEPTH=5 ETA=0.06 Rscript scripts/tuning/run_holdout_predict_pcs.R
 
 suppressPackageStartupMessages({
@@ -27,6 +28,7 @@ if (!file.exists(path_tr) || !file.exists(path_te)) {
 }
 
 model <- tolower(Sys.getenv("MODEL", unset = "xgb"))
+if (identical(model, "ranger")) model <- "rf"
 
 read_xy <- function(path) {
   df <- arrow::read_parquet(path, as_data_frame = TRUE)
@@ -58,6 +60,29 @@ if (identical(model, "glmnet")) {
   fit <- glmnet::cv.glmnet(tr$X, tr$y, alpha = 0, nfolds = 10, family = "gaussian", type.measure = "mse")
   pred <- as.numeric(predict(fit, newx = te$X, s = "lambda.min"))
   fit_note <- sprintf("glmnet ridge, lambda.min=%.6g", as.numeric(fit$lambda.min))
+} else if (identical(model, "rf")) {
+  if (!requireNamespace("ranger", quietly = TRUE)) stop("install.packages('ranger')")
+  num_trees <- as.integer(Sys.getenv("RF_NUM_TREES", unset = "300"))
+  mtry <- as.integer(Sys.getenv("RF_MTRY", unset = as.character(min(50L, ncol(tr$X)))))
+  min_node <- as.integer(Sys.getenv("RF_MIN_NODE_SIZE", unset = "3"))
+  rf_seed <- as.integer(Sys.getenv("RF_SEED", unset = "42"))
+  dat_tr <- data.frame(y = tr$y, as.data.frame(tr$X, stringsAsFactors = FALSE))
+  fit <- ranger::ranger(
+    y ~ .,
+    data = dat_tr,
+    num.trees = num_trees,
+    min.node.size = min_node,
+    mtry = mtry,
+    respect.unordered.factors = "order",
+    num.threads = max(1L, parallel::detectCores() - 1L),
+    seed = rf_seed
+  )
+  dat_te <- as.data.frame(te$X, stringsAsFactors = FALSE)
+  pred <- predict(fit, dat_te)$predictions
+  fit_note <- sprintf(
+    "ranger num.trees=%s mtry=%s min.node.size=%s seed=%s",
+    num_trees, mtry, min_node, rf_seed
+  )
 } else {
   if (!requireNamespace("xgboost", quietly = TRUE)) stop("install.packages('xgboost')")
   nrounds <- as.integer(Sys.getenv("NROUNDS", unset = "350"))
@@ -90,7 +115,8 @@ out_df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-out_pq <- file.path(root, "data", "processed", "holdout_test_predictions.parquet")
+stem <- if (identical(model, "rf")) "holdout_test_predictions_rf" else "holdout_test_predictions"
+out_pq <- file.path(root, "data", "processed", paste0(stem, ".parquet"))
 arrow::write_parquet(out_df, out_pq)
 
 summ <- list(
@@ -104,9 +130,9 @@ summ <- list(
   RMSE_test_levels = rmse_levels(te$y, pred),
   RMSLE_test_log1p = rmsle(te$y, pred),
   elapsed_seconds = elapsed,
-  output_parquet = "data/processed/holdout_test_predictions.parquet"
+  output_parquet = paste0("data/processed/", stem, ".parquet")
 )
-out_json <- file.path(root, "data", "processed", "holdout_test_predictions.json")
+out_json <- file.path(root, "data", "processed", paste0(stem, ".json"))
 jsonlite::write_json(summ, out_json, auto_unbox = TRUE, pretty = TRUE)
 
 message("Fit: ", fit_note)
