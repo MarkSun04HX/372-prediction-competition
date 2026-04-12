@@ -1,0 +1,13 @@
+{
+  "input_parquet": "data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet",
+  "n_rows_in_file": 126003,
+  "n_columns_in_file_schema": 1974,
+  "n_rows_used_head_slice": 12000,
+  "max_rows_arg": 12000,
+  "n_numeric_predictors_after_filter": 1266,
+  "method": "eigen(cor) on scaled X via crossprod; rows = head(., max_rows) from Parquet",
+  "components_for_90pct_trace": 220,
+  "components_for_95pct_trace": 316,
+  "shrunk_feature_count_if_use_k90": 220,
+  "note": "After PCA you use k PC score columns instead of n_orig raw predictors. For CV, fit the PC basis on training data only."
+}

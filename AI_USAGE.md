@@ -108,6 +108,66 @@
 
 ---
 
+## 2026-04-12 — Delete raw MEPS data; keep processed Parquet only
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Delete raw data, only keep processed data so local repo storage stays smaller.
+- **Output summary:** Removed **`data/raw/ascii/*.dat`**, **`data/raw/stata_zips/*.zip`**, and extracted **`data/raw/stata/h*/`** `.dta` trees (~**871 MB** freed). Left **`data/processed/*.parquet`** and JSON manifests (~**88 MB**). Added **`.gitkeep`** under `data/raw/{ascii,stata_zips,stata,reference}` so empty folders stay in the tree. Updated **`data/README.md`** to describe optional raw paths and re-download via **`Rscript scripts/process_meps_for_modeling.R --download`**.
+- **What I used:** Re-run the processing script with **`--download`** whenever you need to rebuild Parquet from MEPS after wiping `data/raw/`.
+- **Verification:** `du -sh data/raw` ≈ **0** (only `.gitkeep`); `data/processed` still lists six Parquet files plus manifests.
+
+---
+
+## 2026-04-12 — Should we use feature selection?
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Should we try to perform feature selection?
+- **Output summary:** Advised **yes, but mainly via elastic net/lasso** (embedded sparsity) as the default; **tree models** as an alternative that often needs no separate filter. Warned against **select-then-CV on the full data**; recommended **nested CV** or **selection inside folds** if adding explicit filters. Suggested optional **light** steps (near-zero variance, high missingness) only on **training** data or **within CV**.
+- **What I used:** Treat glmnet’s zero coefficients as the primary “selected” set unless the write-up or runtime requires more.
+- **Verification:** N/A (modeling strategy guidance).
+
+---
+
+## 2026-04-12 — PCA vs feature selection without elastic net
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Without elastic net, can we use PCA for feature selection to keep only the most important features?
+- **Output summary:** Explained PCA is **unsupervised** compression (variance in **X**), not selection of **y**-important original variables; keeping top PCs is **dimension reduction**, not guaranteed predictive ranking. Recommended choosing **k by CV on prediction error** if using PCA + a learner on scores, and named **PLS / lasso / elastic net** when the goal is **supervised** sparsity or variable importance in **X** for **y**.
+- **What I used:** Treat “% variance explained” alone as an insufficient rule for choosing **k** for forecasting.
+- **Verification:** N/A (conceptual guidance).
+
+---
+
+## 2026-04-12 — PCA for faster algorithms (runtime vs accuracy)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Main task is lowering runtime per algorithm; if PCA combines/shrinks columns, is that helpful?
+- **Output summary:** Confirmed **yes**: PCA (or other low-rank compression) **reduces p**, which usually **cuts training cost** for later models; PCs **mix** original predictors so information is not limited to one raw column. Caveats: **fit PCA on training only** (per CV fold when tuning); PCA step has its own cost but often **net savings** when many fits/tunes follow; **tune k** (e.g. 50–200) with validation or a time budget, not variance-in-X alone, if accuracy matters.
+- **What I used:** Prototype with a few k values on a subsample to estimate speed before full CV.
+- **Verification:** N/A (strategy guidance).
+
+---
+
+## 2026-04-12 — Script: PCA dimension report (`run_pca_dimension_reduction.R`)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run basic PCA, shrink dimensions, report how many features remain.
+- **Output summary:** Added **`scripts/run_pca_dimension_reduction.R`**: reads pooled Parquet with **`slice_head`** (default **12k** rows, configurable `--max-rows=`), drops **`TOTEXP`/`FYC_YEAR`**, removes near-constant numerics on that slice, builds **correlation** matrix via **`crossprod(scale(X))`**, **`eigen`**, reports **k** for **≥90%** and **≥95%** trace of eigenvalues. Example run (**12k** rows): **1266** numeric predictors → **220** PCs for 90%, **316** for 95%; schema **1974** cols / **126003** rows recorded. Writes **`data/processed/pca_dimension_report.json`**. Updated **`data/README.md`**. (Earlier **`irlba::prcomp_irlba`** on full **n×p** was too slow; superseded by slice + **p×p** eigen.)
+- **What I used:** Increase `--max-rows` toward full **n** for a slice closer to full-data variance (slower). For production CV, fit PCA on **training** folds only.
+- **Verification:** `Rscript scripts/run_pca_dimension_reduction.R` exited 0; JSON present under `data/processed/`.
+
+---
+
+## 2026-04-12 — Git commit and push (PCA script + report + raw placeholders)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Commit and push current progress to GitHub; user accepts current PCA results.
+- **Output summary:** Staged **`scripts/run_pca_dimension_reduction.R`**, **`data/processed/pca_dimension_report.json`**, **`data/README.md`**, **`data/raw/**/.gitkeep`**, **`AI_USAGE.md`**. Committed and pushed to **`origin/main`**.
+- **What I used:** Parquet outputs remain gitignored; teammates keep large files locally.
+- **Verification:** `git push` succeeded.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
