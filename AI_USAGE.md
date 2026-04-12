@@ -236,6 +236,26 @@
 
 ---
 
+## 2026-04-12 — glmnet α ∈ (0.25, 0.75) mid grid + CV MD
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Try alphas strictly between 0.25 and 0.75 (exclusive) and record results in **`CV_RMSE_RESULTS.md`**.
+- **Output summary:** **`scripts/run_lasso_elasticnet_selection.R`** accepts **`ALPHA_MODE=mid`**: **`seq(0.30, 0.70, 0.05)`** (nine α values), writes **`data/processed/selection_elasticnet_alpha_mid_cv.json`**. **`scripts/build_cv_rmse_results_md.R`** adds a second glmnet subsection and an **Other selection runs** table (legacy + tree). **`data/README.md`** documents the mid run. Example best mid CV RMSE in one run: **α = 0.4**, **≈ 16,331** dollars (similar to α = 0.5 on the coarse grid).
+- **What I used:** Default **`Rscript`** (no env) still refreshes the five-α **`selection_elasticnet_alpha_grid_cv.json`** only if you run without **`ALPHA_MODE=mid`** — mid mode writes the separate mid JSON only.
+- **Verification:** `ALPHA_MODE=mid Rscript scripts/run_lasso_elasticnet_selection.R` exit 0 (~31 s); **`CV_RMSE_RESULTS.md`** lists both grids.
+
+---
+
+## 2026-04-12 — `scripts/tuning/`, XGB CV, `SKIP_RF=1`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Run XGBoost with the current model; later move tuning scripts into **`scripts/tuning/`** and clean up.
+- **Output summary:** Moved **`build_selection_data.R`**, **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**, **`build_cv_rmse_results_md.R`**, **`run_pca_dimension_reduction.R`** to **`scripts/tuning/`** (repo root = **`dirname(script)`/../..**). Added **`scripts/tuning/README.md`**. **`run_rf_xgb_selection.R`**: **`SKIP_RF=1`** skips **`ranger`** and runs **XGBoost only**; JSON includes **`skip_rf`**. Ran **`SKIP_RF=1 Rscript scripts/tuning/run_rf_xgb_selection.R`**: CV RMSE (levels) **≈ 16,256**, **~446 s** for XGB block; wrote **`selection_rf_xgb_cv.json`**. **`build_cv_rmse_results_md.R`** adds RF/XGB rows; **`README.md`**, **`data/README.md`**, **`CV_RMSE_RESULTS.md`** paths updated to **`scripts/tuning/...`**.
+- **What I used:** Full RF+XGB: omit **`SKIP_RF`** (expect long **`ranger`** time). Re-run **`build_cv_rmse_results_md.R`** after new JSON.
+- **Verification:** XGB-only script exit 0; **`CV_RMSE_RESULTS.md`** shows XGB row and skipped RF row for this run.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

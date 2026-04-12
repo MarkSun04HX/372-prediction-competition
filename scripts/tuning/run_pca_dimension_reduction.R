@@ -3,8 +3,8 @@
 # of the pooled Parquet (does not load all 126k rows into R by default).
 #
 # Usage:
-#   Rscript scripts/run_pca_dimension_reduction.R
-#   Rscript scripts/run_pca_dimension_reduction.R --max-rows=15000
+#   Rscript scripts/tuning/run_pca_dimension_reduction.R
+#   Rscript scripts/tuning/run_pca_dimension_reduction.R --max-rows=15000
 #
 # For a random subsample without reading the full file, row indices are taken from
 # the head slice (deterministic). For random + full scan, use arrow Dataset + filter
@@ -24,7 +24,7 @@ max_rows <- if (length(max_rows_arg)) {
 
 cmd <- commandArgs(trailingOnly = FALSE)
 fn <- sub("^--file=", "", cmd[grep("^--file=", cmd)])
-root <- normalizePath(file.path(dirname(fn), ".."), winslash = "/", mustWork = TRUE)
+root <- normalizePath(file.path(dirname(fn), "..", ".."), winslash = "/", mustWork = TRUE)
 setwd(root)
 
 pooled_path <- file.path(root, "data", "processed", "meps_fyc_2019_2023_pooled_for_modeling.parquet")

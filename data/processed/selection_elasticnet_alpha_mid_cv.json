@@ -1,0 +1,66 @@
+{
+  "input": "data/processed/selection_data.parquet",
+  "alpha_mode": "mid",
+  "n_rows": 10000,
+  "n_features": 220,
+  "nfolds": 10,
+  "type_measure": "mse",
+  "cv_rmse_note": "sqrt(cv MSE) at lambda.min; alpha grid strictly between 0.25 and 0.75 (exclusive)",
+  "alpha_grid": [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7],
+  "results": [
+    {
+      "alpha": 0.3,
+      "label": "elastic_net_0.30",
+      "lambda_min": 264.0666,
+      "cv_rmse_levels": 16369.3255
+    },
+    {
+      "alpha": 0.35,
+      "label": "elastic_net_0.35",
+      "lambda_min": 248.411,
+      "cv_rmse_levels": 16342.5043
+    },
+    {
+      "alpha": 0.4,
+      "label": "elastic_net_0.40",
+      "lambda_min": 180.4558,
+      "cv_rmse_levels": 16330.8423
+    },
+    {
+      "alpha": 0.45,
+      "label": "elastic_net_0.45",
+      "lambda_min": 176.0444,
+      "cv_rmse_levels": 16388.9341
+    },
+    {
+      "alpha": 0.5,
+      "label": "elastic_net_0.50",
+      "lambda_min": 144.3646,
+      "cv_rmse_levels": 16340.7548
+    },
+    {
+      "alpha": 0.55,
+      "label": "elastic_net_0.55",
+      "lambda_min": 144.0363,
+      "cv_rmse_levels": 16370.5214
+    },
+    {
+      "alpha": 0.6,
+      "label": "elastic_net_0.60",
+      "lambda_min": 132.0333,
+      "cv_rmse_levels": 16355.088
+    },
+    {
+      "alpha": 0.65,
+      "label": "elastic_net_0.65",
+      "lambda_min": 133.7598,
+      "cv_rmse_levels": 16384.3443
+    },
+    {
+      "alpha": 0.7,
+      "label": "elastic_net_0.70",
+      "lambda_min": 124.2055,
+      "cv_rmse_levels": 16387.4283
+    }
+  ]
+}

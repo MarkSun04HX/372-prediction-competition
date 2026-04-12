@@ -2,7 +2,7 @@
 # Random subsample n=10000 from pooled Parquet; PCA (k=220) on numeric predictors;
 # write selection_data.parquet with PC1..PC220 + TOTEXP + FYC_YEAR.
 #
-# Usage: Rscript scripts/build_selection_data.R
+# Usage: Rscript scripts/tuning/build_selection_data.R
 # Env: SEED=42 N_ROW=10000 N_PC=220 (optional)
 
 suppressPackageStartupMessages({
@@ -12,7 +12,7 @@ suppressPackageStartupMessages({
 
 cmd <- commandArgs(trailingOnly = FALSE)
 fn <- sub("^--file=", "", cmd[grep("^--file=", cmd)])
-root <- normalizePath(file.path(dirname(fn), ".."), winslash = "/", mustWork = TRUE)
+root <- normalizePath(file.path(dirname(fn), "..", ".."), winslash = "/", mustWork = TRUE)
 setwd(root)
 
 seed <- as.integer(Sys.getenv("SEED", unset = "42"))

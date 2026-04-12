@@ -63,7 +63,7 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ## Data pipeline: how selections and variables are built (this repo)
 
-This section matches the **R scripts** in `scripts/` and `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+This section matches the **R scripts** in `scripts/` (ETL) and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments), plus `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
 
 ### 1. Per-year modeling Parquet (`meps_fyc_{year}_for_modeling.parquet`)
 
@@ -86,7 +86,7 @@ This section matches the **R scripts** in `scripts/` and `R/meps_competition_exc
 
 ### 3. Selection sample and PCA columns (`selection_data.parquet`)
 
-**Script:** `scripts/build_selection_data.R`. Defaults can be overridden with environment variables **`SEED`**, **`N_ROW`**, **`N_PC`** (defaults **`42`**, **`10000`**, **`220`**).
+**Script:** `scripts/tuning/build_selection_data.R`. Defaults can be overridden with environment variables **`SEED`**, **`N_ROW`**, **`N_PC`** (defaults **`42`**, **`10000`**, **`220`**).
 
 1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
 2. **Row selection:** `set.seed(SEED)` then **`sample.int(nrow(pooled), N_ROW)`** without replacement. Those row indices subset the pooled table.
@@ -100,7 +100,7 @@ This section matches the **R scripts** in `scripts/` and `R/meps_competition_exc
 
 ### 4. CV summaries and `CV_RMSE_RESULTS.md`
 
-Scripts such as **`scripts/run_lasso_elasticnet_selection.R`**, **`scripts/run_regression_tree_selection.R`**, and **`scripts/run_rf_xgb_selection.R`** read **`selection_data.parquet`**, take **`PC*`** columns as predictors and **`TOTEXP`** as the response (levels/dollars unless the script states otherwise), and write JSON metrics under **`data/processed/`**. **`scripts/build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`** as a **results table only** (no enumerated list of PC names); see this README for how **`PC1`–`PC220`** are defined.
+Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`**, take **`PC*`** columns as predictors and **`TOTEXP`** as the response (levels/dollars unless the script states otherwise), and write JSON metrics under **`data/processed/`**. **`scripts/tuning/build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`** as a **results table only** (no enumerated list of PC names); see this README for how **`PC1`–`PC220`** are defined.
 
 ---
 

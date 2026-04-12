@@ -9,7 +9,7 @@ suppressPackageStartupMessages({
 
 cmd <- commandArgs(trailingOnly = FALSE)
 fn <- sub("^--file=", "", cmd[grep("^--file=", cmd)])
-root <- normalizePath(file.path(dirname(fn), ".."), winslash = "/", mustWork = TRUE)
+root <- normalizePath(file.path(dirname(fn), "..", ".."), winslash = "/", mustWork = TRUE)
 setwd(root)
 
 path <- file.path(root, "data", "processed", "selection_data.parquet")
