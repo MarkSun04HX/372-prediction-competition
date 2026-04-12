@@ -277,6 +277,56 @@ if (!is.null(en) && !is.null(en$results_sorted_by_test_RMSE)) {
   )
 }
 
+abbr_md_cell <- function(s, max_ch = 100L) {
+  s <- gsub("|", "/", as.character(s), fixed = TRUE)
+  if (nchar(s) > max_ch) s <- paste0(substr(s, 1L, max_ch - 3L), "...")
+  s
+}
+
+holdout_one_shot_specs <- list(
+  list(file = "holdout_test_predictions.json", label = "XGBoost"),
+  list(file = "holdout_test_predictions_rf.json", label = "Random forest (`ranger`)"),
+  list(file = "holdout_test_predictions_lgb.json", label = "LightGBM"),
+  list(file = "holdout_test_predictions_catboost.json", label = "CatBoost"),
+  list(file = "holdout_test_predictions_nb.json", label = "Naive Bayes (`e1071`)")
+)
+
+lines <- c(
+  lines,
+  "",
+  "### One-shot holdout: PC models on `selection_test` (see JSON for `n_train` / `n_test`)",
+  "",
+  "Trained on **`selection_train.parquet`**, scored on **`selection_test.parquet`** via **`Rscript scripts/tuning/run_holdout_predict_pcs.R`** (`MODEL=xgb` default, or `MODEL=rf`, `lgb`, `catboost`, `nb`). Values below are **test RMSE** from each run’s JSON (not 10-fold CV on `selection_data`). **Naive Bayes** uses **`TOTEXP` quantile bins** on the training set only, then **posterior expected dollars** (see `fit_note` in JSON).",
+  "",
+  "| Model | Configuration (abridged `fit_note`) | **test RMSE ($)** | test RMSLE | s |",
+  "|-------|--------------------------------------|-----------------:|-----------:|--:|"
+)
+
+any_ho <- FALSE
+for (spec in holdout_one_shot_specs) {
+  j <- read_json_safe(spec$file)
+  if (is.null(j) || is.null(j$RMSE_test_levels)) next
+  any_ho <- TRUE
+  fn <- if (!is.null(j$fit_note)) abbr_md_cell(j$fit_note) else "—"
+  lines <- c(
+    lines,
+    sprintf(
+      "| %s | %s | **%.2f** | %.5f | %.1f |",
+      spec$label,
+      fn,
+      as.numeric(j$RMSE_test_levels),
+      as.numeric(j$RMSLE_test_log1p),
+      as.numeric(j$elapsed_seconds)
+    )
+  )
+}
+if (!any_ho) {
+  lines <- c(
+    lines,
+    "| — | *(no `holdout_test_predictions*.json` — run `MODEL=... Rscript scripts/tuning/run_holdout_predict_pcs.R`)* | — | — | — |"
+  )
+}
+
 lines <- c(
   lines,
   "",

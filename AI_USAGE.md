@@ -336,6 +336,16 @@
 
 ---
 
+## 2026-04-12 — CatBoost + naive Bayes holdout; table in CV_RMSE_RESULTS
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Will **CatBoost** work here; **record** test results in **`CV_RMSE_RESULTS.md`**; try **CatBoost** and **naive Bayes**.
+- **Output summary:** **CatBoost** runs as **`MODEL=catboost`** in **`run_holdout_predict_pcs.R`** (**RMSE** loss, **350** iterations, **depth 5**, **lr 0.06**, **rsm/subsample 0.8**, **`logging_level=Silent`**). **`MODEL=nb`**: **`e1071::naiveBayes`** on **train-only `TOTEXP` quantile bins** (default **30** breaks → **26** levels after `unique` quantiles), test prediction = **posterior mean of bin-wise mean spend** (documented as a **classification surrogate**, not classical NB regression). **`build_cv_rmse_results_md.R`** adds subsection **“One-shot holdout: PC models on `selection_test`”** merging **`holdout_test_predictions{,_rf,_lgb,_catboost,_nb}.json`**. Ran on **50k/2k** PCs: **CatBoost test RMSE ≈ 18,862**, **NB ≈ 31,788**; **`catboost`** + **`e1071`** added to **`scripts/setup.R`** install list. **`data/README.md`**, **`scripts/tuning/README.md`** updated.
+- **What I used:** Same **`selection_train`/`selection_test`** Parquets as other one-shot models; **`CV_RMSE_RESULTS.md`** regenerated via **`build_cv_rmse_results_md.R`**.
+- **Verification:** `MODEL=catboost` / `MODEL=nb` holdout scripts exit **0**; markdown table lists **XGB, RF, LGB, CatBoost, NB** with test RMSE.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

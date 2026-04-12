@@ -93,6 +93,18 @@ For each **α**, **`cv.glmnet`** on **`selection_train.parquet`** only → **`la
 | 4 | 0.5 | 86.0873 | 9918.62 | **31400.51** | 9345.95 | 3.68590 | 212 | 3.2 |
 | 5 | 0.75 | 62.9872 | 9905.69 | **31400.55** | 9349.14 | 3.68880 | 209 | 3.3 |
 
+### One-shot holdout: PC models on `selection_test` (see JSON for `n_train` / `n_test`)
+
+Trained on **`selection_train.parquet`**, scored on **`selection_test.parquet`** via **`Rscript scripts/tuning/run_holdout_predict_pcs.R`** (`MODEL=xgb` default, or `MODEL=rf`, `lgb`, `catboost`, `nb`). Values below are **test RMSE** from each run’s JSON (not 10-fold CV on `selection_data`). **Naive Bayes** uses **`TOTEXP` quantile bins** on the training set only, then **posterior expected dollars** (see `fit_note` in JSON).
+
+| Model | Configuration (abridged `fit_note`) | **test RMSE ($)** | test RMSLE | s |
+|-------|--------------------------------------|-----------------:|-----------:|--:|
+| XGBoost | xgboost nrounds=350 max_depth=5 eta=0.06 | **17639.62** | 2.96890 | 548.9 |
+| Random forest (`ranger`) | ranger num.trees=300 mtry=50 min.node.size=3 seed=42 | **19030.28** | 3.08420 | 627.3 |
+| LightGBM | lightgbm nrounds=350 num_leaves=31 max_depth=5 learning_rate=0.06 feat_frac=0.8 bag_frac=0.8 seed=42 | **18685.91** | 3.05600 | 19.6 |
+| CatBoost | catboost iterations=350 depth=5 learning_rate=0.06 rsm=0.8 subsample=0.8 seed=42 | **18862.16** | 3.09300 | 9.2 |
+| Naive Bayes (`e1071`) | e1071 naiveBayes on 26 TOTEXP quantile bins (train); test pred = posterior mean of bin means (not... | **31787.66** | 3.18650 | 13.4 |
+
 ## Pooled data (full PCs / many columns)
 
 | Model | Configuration | CV RMSE | Notes |

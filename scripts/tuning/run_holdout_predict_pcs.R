@@ -7,6 +7,8 @@
 #   MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R   # ridge glmnet on PCs
 #   MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R     # ranger (same defaults as run_rf_xgb_selection.R)
 #   MODEL=lgb Rscript scripts/tuning/run_holdout_predict_pcs.R    # LightGBM (defaults aligned with default XGB)
+#   MODEL=catboost Rscript scripts/tuning/run_holdout_predict_pcs.R  # CatBoost RMSE (defaults aligned with default XGB)
+#   MODEL=nb Rscript scripts/tuning/run_holdout_predict_pcs.R     # e1071 naiveBayes: TOTEXP binned on train → posterior mean $
 #   MODEL=xgb NROUNDS=350 MAX_DEPTH=5 ETA=0.06 Rscript scripts/tuning/run_holdout_predict_pcs.R
 
 suppressPackageStartupMessages({
@@ -31,6 +33,7 @@ if (!file.exists(path_tr) || !file.exists(path_te)) {
 model <- tolower(Sys.getenv("MODEL", unset = "xgb"))
 if (identical(model, "ranger")) model <- "rf"
 if (identical(model, "lightgbm")) model <- "lgb"
+if (identical(model, "cb")) model <- "catboost"
 
 read_xy <- function(path) {
   df <- arrow::read_parquet(path, as_data_frame = TRUE)
@@ -121,6 +124,63 @@ if (identical(model, "glmnet")) {
     "lightgbm nrounds=%s num_leaves=%s max_depth=%s learning_rate=%s feat_frac=%s bag_frac=%s seed=%s",
     nrounds, num_leaves, max_depth, lr, feat_frac, bag_frac, lgb_seed
   )
+} else if (identical(model, "catboost")) {
+  if (!requireNamespace("catboost", quietly = TRUE)) stop("install.packages('catboost')")
+  nrounds <- as.integer(Sys.getenv("CB_ITERATIONS", unset = Sys.getenv("NROUNDS", unset = "350")))
+  depth <- as.integer(Sys.getenv("CB_DEPTH", unset = Sys.getenv("MAX_DEPTH", unset = "5")))
+  lr <- as.numeric(Sys.getenv("CB_LEARNING_RATE", unset = Sys.getenv("ETA", unset = "0.06")))
+  rsm <- as.numeric(Sys.getenv("CB_RSM", unset = "0.8"))
+  subsample <- as.numeric(Sys.getenv("CB_SUBSAMPLE", unset = "0.8"))
+  cb_seed <- as.integer(Sys.getenv("CB_RANDOM_SEED", unset = "42"))
+  threads <- as.integer(max(1L, parallel::detectCores() - 1L))
+  train_dir <- file.path(tempdir(), paste0("catboost_", Sys.getpid(), "_", as.integer(Sys.time())))
+  dir.create(train_dir, showWarnings = FALSE, recursive = TRUE)
+  pool_tr <- catboost::catboost.load_pool(data = tr$X, label = tr$y)
+  params <- list(
+    iterations = nrounds,
+    learning_rate = lr,
+    depth = depth,
+    loss_function = "RMSE",
+    rsm = rsm,
+    subsample = subsample,
+    random_seed = cb_seed,
+    thread_count = threads,
+    train_dir = train_dir,
+    logging_level = "Silent",
+    allow_writing_files = FALSE
+  )
+  fit_cb <- catboost::catboost.train(pool_tr, test_pool = NULL, params = params)
+  pool_te <- catboost::catboost.load_pool(data = te$X)
+  pred <- as.numeric(catboost::catboost.predict(fit_cb, pool_te))
+  fit_note <- sprintf(
+    "catboost iterations=%s depth=%s learning_rate=%s rsm=%s subsample=%s seed=%s",
+    nrounds, depth, lr, rsm, subsample, cb_seed
+  )
+} else if (identical(model, "nb")) {
+  if (!requireNamespace("e1071", quietly = TRUE)) stop("install.packages('e1071')")
+  n_bins <- as.integer(Sys.getenv("NB_N_BINS", unset = "30"))
+  if (is.na(n_bins) || n_bins < 5L) n_bins <- 30L
+  brk <- unique(stats::quantile(tr$y, probs = seq(0, 1, length.out = n_bins + 1L), names = FALSE))
+  if (length(brk) < 3L) stop("NB: increase NB_N_BINS or check training y variance")
+  bins_tr <- cut(tr$y, breaks = brk, include.lowest = TRUE)
+  bins_tr <- droplevels(bins_tr)
+  tr_df <- data.frame(yclass = bins_tr, as.data.frame(tr$X, stringsAsFactors = FALSE))
+  te_df <- as.data.frame(te$X, stringsAsFactors = FALSE)
+  fit_nb <- e1071::naiveBayes(yclass ~ ., data = tr_df, laplace = 1)
+  pr <- predict(fit_nb, newdata = te_df, type = "raw")
+  agg <- stats::aggregate(tr$y ~ bins_tr, FUN = mean)
+  centers <- stats::setNames(agg[[2L]], as.character(agg[[1L]]))
+  cn_pr <- colnames(pr)
+  v <- as.numeric(centers[cn_pr])
+  if (any(is.na(v))) {
+    ybar <- mean(tr$y, na.rm = TRUE)
+    v[is.na(v)] <- ybar
+  }
+  pred <- as.numeric(pr %*% matrix(v, ncol = 1L))
+  fit_note <- sprintf(
+    "e1071 naiveBayes on %d TOTEXP quantile bins (train); test pred = posterior mean of bin means (not standard NB regression)",
+    length(levels(bins_tr))
+  )
 } else {
   if (!requireNamespace("xgboost", quietly = TRUE)) stop("install.packages('xgboost')")
   nrounds <- as.integer(Sys.getenv("NROUNDS", unset = "350"))
@@ -157,6 +217,10 @@ stem <- if (identical(model, "rf")) {
   "holdout_test_predictions_rf"
 } else if (identical(model, "lgb")) {
   "holdout_test_predictions_lgb"
+} else if (identical(model, "catboost")) {
+  "holdout_test_predictions_catboost"
+} else if (identical(model, "nb")) {
+  "holdout_test_predictions_nb"
 } else {
   "holdout_test_predictions"
 }

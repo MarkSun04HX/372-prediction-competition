@@ -76,9 +76,11 @@ Rscript scripts/tuning/run_holdout_predict_pcs.R
 # Ridge on PCs instead: MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R
 # Random forest (ranger), same defaults as CV script: MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R
 # LightGBM (defaults aligned with default XGB): MODEL=lgb Rscript scripts/tuning/run_holdout_predict_pcs.R
+# CatBoost RMSE: MODEL=catboost Rscript scripts/tuning/run_holdout_predict_pcs.R
+# Naive Bayes (binned TOTEXP on train → posterior mean $): MODEL=nb Rscript scripts/tuning/run_holdout_predict_pcs.R
 ```
 
-Writes `holdout_test_predictions.parquet` + `.json` (XGB or glmnet), or **`holdout_test_predictions_rf.*`** / **`holdout_test_predictions_lgb.*`** for **`MODEL=rf`** / **`MODEL=lgb`**. Older glmnet / RF CV scripts still use **`selection_data.parquet`** (train rows only).
+Writes `holdout_test_predictions.parquet` + `.json` (XGB or glmnet), or **`holdout_test_predictions_{rf,lgb,catboost,nb}.*`** for the matching **`MODEL`**. Older glmnet / RF CV scripts still use **`selection_data.parquet`** (train rows only). **`CV_RMSE_RESULTS.md`** includes a **one-shot holdout** table when those JSONs exist; refresh with **`build_cv_rmse_results_md.R`**.
 
 **Lasso / elastic net CV RMSE** on `selection_data` (PCs only, `TOTEXP` in levels):
 
