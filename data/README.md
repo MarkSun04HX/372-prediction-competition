@@ -62,7 +62,14 @@ Outputs: `selection_train.parquet`, `selection_test.parquet`, `selection_data.pa
 Rscript scripts/tuning/run_xgb_tune_holdout.R
 ```
 
-Writes `processed/xgb_tuning_holdout.json` and **`xgb_tuning_holdout_rmse.csv`**. Optional **`XGB_GRID=large`** for more parameter combinations. Then refresh **`CV_RMSE_RESULTS.md`**: `Rscript scripts/tuning/build_cv_rmse_results_md.R`. **Direct PC → test predictions (2000 rows):**
+Writes `processed/xgb_tuning_holdout.json` and **`xgb_tuning_holdout_rmse.csv`**. Optional **`XGB_GRID=large`** for more parameter combinations. **glmnet holdout** (same train/test Parquets; per-α **`cv.glmnet`** on train → **`lambda.min`** → test RMSE):
+
+```bash
+Rscript scripts/tuning/run_elasticnet_holdout.R
+# Single α (e.g. elastic net α=0.5): HOLDOUT_ALPHAS=0.5 Rscript scripts/tuning/run_elasticnet_holdout.R
+```
+
+Writes **`elasticnet_holdout.json`** and **`elasticnet_holdout_rmse.csv`**. Then refresh **`CV_RMSE_RESULTS.md`**: `Rscript scripts/tuning/build_cv_rmse_results_md.R`. **Direct PC → test predictions (2000 rows):**
 
 ```bash
 Rscript scripts/tuning/run_holdout_predict_pcs.R

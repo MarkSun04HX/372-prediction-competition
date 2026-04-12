@@ -214,6 +214,69 @@ if (!is.null(xh) && !is.null(xh$results_sorted_by_test_RMSE)) {
   )
 }
 
+en <- read_json_safe("elasticnet_holdout.json")
+lines <- c(
+  lines,
+  "",
+  "### glmnet — holdout: test RMSE by α (2k test rows; λ from 10-fold CV on train)",
+  "",
+  "For each **α**, **`cv.glmnet`** on **`selection_train.parquet`** only → **`lambda.min`** → predictions on **`selection_test.parquet`**. **`cv_rmse_train`** is sqrt(in-sample CV MSE at that λ), not test RMSE. Regenerate: `Rscript scripts/tuning/run_elasticnet_holdout.R` (`HOLDOUT_ALPHAS=0.5` for a single α). CSV: **`data/processed/elasticnet_holdout_rmse.csv`**.",
+  "",
+  "| rank | α | λ_min | cv_rmse_train | **test RMSE ($)** | train RMSE | test RMSLE | |β|>0 | s |",
+  "|-----:|--:|------:|---------------:|-----------------:|-----------:|-----------:|------:|--:|"
+)
+
+if (!is.null(en) && !is.null(en$results_sorted_by_test_RMSE)) {
+  rs <- en$results_sorted_by_test_RMSE
+  if (is.data.frame(rs)) {
+    for (k in seq_len(nrow(rs))) {
+      r <- as.list(rs[k, , drop = FALSE])
+      if (is.null(r$RMSE_test_levels)) next
+      lines <- c(
+        lines,
+        sprintf(
+          "| %d | %s | %s | %.2f | **%.2f** | %.2f | %.5f | %s | %.1f |",
+          k,
+          format(r$alpha, digits = 4, trim = TRUE),
+          format(r$lambda_min, digits = 6),
+          as.numeric(r$cv_rmse_levels_train_subset),
+          as.numeric(r$RMSE_test_levels),
+          as.numeric(r$RMSE_train_levels),
+          as.numeric(r$RMSLE_test_log1p),
+          r$n_nonzero_coef_at_lambda_min,
+          as.numeric(r$elapsed_seconds)
+        )
+      )
+    }
+  } else {
+    if (!is.list(rs)) rs <- list(rs)
+    for (k in seq_along(rs)) {
+      r <- rs[[k]]
+      if (is.null(r$RMSE_test_levels)) next
+      lines <- c(
+        lines,
+        sprintf(
+          "| %d | %s | %s | %.2f | **%.2f** | %.2f | %.5f | %s | %.1f |",
+          k,
+          format(r$alpha, digits = 4, trim = TRUE),
+          format(r$lambda_min, digits = 6),
+          as.numeric(r$cv_rmse_levels_train_subset),
+          as.numeric(r$RMSE_test_levels),
+          as.numeric(r$RMSE_train_levels),
+          as.numeric(r$RMSLE_test_log1p),
+          r$n_nonzero_coef_at_lambda_min,
+          as.numeric(r$elapsed_seconds)
+        )
+      )
+    }
+  }
+} else {
+  lines <- c(
+    lines,
+    "| — | — | — | — | — | — | — | — | *no `elasticnet_holdout.json` — run `Rscript scripts/tuning/run_elasticnet_holdout.R`* |"
+  )
+}
+
 lines <- c(
   lines,
   "",

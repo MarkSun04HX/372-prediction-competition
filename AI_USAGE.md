@@ -306,6 +306,16 @@
 
 ---
 
+## 2026-04-12 — glmnet holdout (elastic net family) on 2k test
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Same holdout prediction with **elastic net** and report **RMSE**.
+- **Output summary:** Added **`scripts/tuning/run_elasticnet_holdout.R`**: default **α ∈ {0, 0.25, 0.5, 0.75, 1}**; for each, **`cv.glmnet`** (**10-fold**) on **`selection_train.parquet`** → **`lambda.min`** → test predictions on **`selection_test.parquet`**. Ran locally (~**17 s**): best **test RMSE (levels)** **≈ 31,397** at **α=0 (ridge)**, **λ≈788**; **elastic net α=0.5** gave **test RMSE ≈ 31,400.51**, **λ≈86.1**, train RMSE **≈ 9,346**, test RMSLE **≈ 3.686**. Wrote **`elasticnet_holdout.json`**, **`elasticnet_holdout_rmse.csv`**; **`build_cv_rmse_results_md.R`** adds a holdout glmnet table; **`data/README.md`** / **`scripts/tuning/README.md`** document the run.
+- **What I used:** Same protocol as XGB holdout (train-only CV for tuning λ; score fixed **2k** test). **`HOLDOUT_ALPHAS=0.5`** limits to a single α.
+- **Verification:** `run_elasticnet_holdout.R` and **`build_cv_rmse_results_md.R`** exit 0.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

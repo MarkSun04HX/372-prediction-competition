@@ -81,6 +81,18 @@ Train on **`selection_train.parquet`**, score **`selection_test.parquet`** (same
 | 35 | 150 | 4 | 0.04 | 0.8 | 0.8 | **32769.54** | 9305.29 | 3.33010 | 33.5 |
 | 36 | 150 | 3 | 0.04 | 0.8 | 0.8 | **32973.93** | 10698.72 | 3.46880 | 25.1 |
 
+### glmnet — holdout: test RMSE by α (2k test rows; λ from 10-fold CV on train)
+
+For each **α**, **`cv.glmnet`** on **`selection_train.parquet`** only → **`lambda.min`** → predictions on **`selection_test.parquet`**. **`cv_rmse_train`** is sqrt(in-sample CV MSE at that λ), not test RMSE. Regenerate: `Rscript scripts/tuning/run_elasticnet_holdout.R` (`HOLDOUT_ALPHAS=0.5` for a single α). CSV: **`data/processed/elasticnet_holdout_rmse.csv`**.
+
+| rank | α | λ_min | cv_rmse_train | **test RMSE ($)** | train RMSE | test RMSLE | |β|>0 | s |
+|-----:|--:|------:|---------------:|-----------------:|-----------:|-----------:|------:|--:|
+| 1 | 0 | 788.017 | 9902.67 | **31397.28** | 9346.42 | 3.62940 | 220 | 4.2 |
+| 2 | 0.25 | 142.942 | 9903.54 | **31400.22** | 9341.56 | 3.67830 | 215 | 3.3 |
+| 3 | 1 | 51.8463 | 9934.36 | **31400.51** | 9353.57 | 3.69140 | 209 | 3.1 |
+| 4 | 0.5 | 86.0873 | 9918.62 | **31400.51** | 9345.95 | 3.68590 | 212 | 3.2 |
+| 5 | 0.75 | 62.9872 | 9905.69 | **31400.55** | 9349.14 | 3.68880 | 209 | 3.3 |
+
 ## Pooled data (full PCs / many columns)
 
 | Model | Configuration | CV RMSE | Notes |
