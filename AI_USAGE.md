@@ -276,6 +276,16 @@
 
 ---
 
+## 2026-04-12 — Predict on 2k test using 220 PCs only
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Use the **220 PCs** and then do predictions on the **2000** test set.
+- **Output summary:** Added **`scripts/tuning/run_holdout_predict_pcs.R`**: reads **`selection_train.parquet`** / **`selection_test.parquet`**, uses **`PC*`** as **`X`**, fits on **train** (default **XGBoost** with env **`NROUNDS`**, **`MAX_DEPTH`**, **`ETA`**; or **`MODEL=glmnet`** for **ridge `cv.glmnet`** on PCs), predicts **`TOTEXP`** for **every test row**, writes **`data/processed/holdout_test_predictions.parquet`** (`TOTEXP_true`, `TOTEXP_pred`, `FYC_YEAR`) and **`holdout_test_predictions.json`** (RMSE / RMSLE / timing). **`data/README.md`** and **`scripts/tuning/README.md`** updated.
+- **What I used:** Requires the holdout build first (**`build_selection_data.R`**). This is separate from **`run_xgb_tune_holdout.R`** (grid search only, no per-row file).
+- **Verification:** R parse check on the new script.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

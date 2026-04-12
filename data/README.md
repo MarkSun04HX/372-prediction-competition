@@ -10,6 +10,7 @@
 | `processed/selection_data.parquet` | **Training slice copy** (same as `selection_train` when using defaults) for scripts that still read `selection_data.parquet` only. |
 | `processed/selection_train_test_manifest.json` | Row counts, `N_PC`, paths for the selection build. |
 | `processed/xgb_tuning_holdout.json` | XGBoost grid results on train / test PCs from `run_xgb_tune_holdout.R` (optional). |
+| `processed/holdout_test_predictions.parquet` | One row per test person: **`TOTEXP_true`**, **`TOTEXP_pred`**, **`FYC_YEAR`** — from `run_holdout_predict_pcs.R` (220 PCs → model → 2000 predictions). |
 | `reference/` | Optional downloaded docs, etc. |
 
 ## Build modeling-ready Parquet (R)
@@ -60,7 +61,14 @@ Outputs: `selection_train.parquet`, `selection_test.parquet`, `selection_data.pa
 Rscript scripts/tuning/run_xgb_tune_holdout.R
 ```
 
-Writes `processed/xgb_tuning_holdout.json`. Older glmnet / RF scripts still use **`selection_data.parquet`** (train rows only).
+Writes `processed/xgb_tuning_holdout.json`. **Direct PC → test predictions (2000 rows):**
+
+```bash
+Rscript scripts/tuning/run_holdout_predict_pcs.R
+# Ridge on PCs instead: MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R
+```
+
+Writes `holdout_test_predictions.parquet` and `holdout_test_predictions.json`. Older glmnet / RF scripts still use **`selection_data.parquet`** (train rows only).
 
 **Lasso / elastic net CV RMSE** on `selection_data` (PCs only, `TOTEXP` in levels):
 

@@ -12,6 +12,7 @@ Scripts here build **selection Parquets** (train / test holdout or legacy single
 | `run_regression_tree_selection.R` | `rpart` 10-fold CV → `selection_rpart_cv.json` |
 | `run_rf_xgb_selection.R` | `ranger` + `xgboost` 10-fold CV → `selection_rf_xgb_cv.json` (`SKIP_RF=1` for XGB only) |
 | `run_xgb_tune_holdout.R` | XGBoost hyperparameter grid: train on `selection_train`, metric on `selection_test` → `xgb_tuning_holdout.json` |
+| `run_holdout_predict_pcs.R` | Fit on **220 PCs** in `selection_train`, predict **`TOTEXP` for all 2000 test rows** → `holdout_test_predictions.parquet` + `.json` (`MODEL=glmnet` or default XGB) |
 | `build_cv_rmse_results_md.R` | Merge JSON metrics into root **`CV_RMSE_RESULTS.md`** |
 
 ETL and related commands are consolidated in **`scripts/setup.R`** (not in this folder).
