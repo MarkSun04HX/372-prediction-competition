@@ -1,0 +1,14 @@
+{
+  "mode": "train_test_holdout",
+  "n_train": 10000,
+  "n_test": 2000,
+  "n_pc": 220,
+  "seed": 42,
+  "pca_fitted_on": "train_only",
+  "paths": {
+    "selection_train": "data/processed/selection_train.parquet",
+    "selection_test": "data/processed/selection_test.parquet",
+    "selection_data": "data/processed/selection_data.parquet"
+  },
+  "note": "Test rows are disjoint from train; PCA rotation from train only."
+}
