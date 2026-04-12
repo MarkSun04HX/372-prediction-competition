@@ -2,12 +2,12 @@
   "input_train": "data/processed/selection_train.parquet",
   "input_test": "data/processed/selection_test.parquet",
   "n_train": 50000,
-  "n_test": 2000,
+  "n_test": 10000,
   "n_pc": 220,
   "model": "catboost",
   "fit_note": "catboost iterations=350 depth=5 learning_rate=0.06 rsm=0.8 subsample=0.8 seed=42",
-  "RMSE_test_levels": 18862.157,
-  "RMSLE_test_log1p": 3.093,
-  "elapsed_seconds": 9.189,
+  "RMSE_test_levels": 12256.2801,
+  "RMSLE_test_log1p": 3.0965,
+  "elapsed_seconds": 9.9,
   "output_parquet": "data/processed/holdout_test_predictions_catboost.parquet"
 }

@@ -87,11 +87,11 @@ For each **α**, **`cv.glmnet`** on **`selection_train.parquet`** only → **`la
 
 | rank | α | λ_min | cv_rmse_train | **test RMSE ($)** | train RMSE | test RMSLE | |β|>0 | s |
 |-----:|--:|------:|---------------:|-----------------:|-----------:|-----------:|------:|--:|
-| 1 | 0 | 788.017 | 9902.67 | **31397.28** | 9346.42 | 3.62940 | 220 | 4.2 |
-| 2 | 0.25 | 142.942 | 9903.54 | **31400.22** | 9341.56 | 3.67830 | 215 | 3.3 |
-| 3 | 1 | 51.8463 | 9934.36 | **31400.51** | 9353.57 | 3.69140 | 209 | 3.1 |
-| 4 | 0.5 | 86.0873 | 9918.62 | **31400.51** | 9345.95 | 3.68590 | 212 | 3.2 |
-| 5 | 0.75 | 62.9872 | 9905.69 | **31400.55** | 9349.14 | 3.68880 | 209 | 3.3 |
+| 1 | 0.25 | 162.775 | 14213.07 | **11671.89** | 13909.05 | 3.18380 | 208 | 14.8 |
+| 2 | 0.75 | 59.5485 | 14180.74 | **11675.02** | 13909.07 | 3.19250 | 206 | 14.8 |
+| 3 | 0.5 | 81.3875 | 14184.57 | **11677.09** | 13907.09 | 3.19010 | 208 | 14.4 |
+| 4 | 0 | 678.813 | 14204.83 | **11681.87** | 13903.31 | 3.19280 | 220 | 16.3 |
+| 5 | 1 | 37.0786 | 14196.10 | **11683.52** | 13904.11 | 3.19760 | 208 | 14.4 |
 
 ### One-shot holdout: PC models on `selection_test` (see JSON for `n_train` / `n_test`)
 
@@ -99,11 +99,11 @@ Trained on **`selection_train.parquet`**, scored on **`selection_test.parquet`**
 
 | Model | Configuration (abridged `fit_note`) | **test RMSE ($)** | test RMSLE | s |
 |-------|--------------------------------------|-----------------:|-----------:|--:|
-| XGBoost | xgboost nrounds=350 max_depth=5 eta=0.06 | **17639.62** | 2.96890 | 548.9 |
-| Random forest (`ranger`) | ranger num.trees=300 mtry=50 min.node.size=3 seed=42 | **19030.28** | 3.08420 | 627.3 |
-| LightGBM | lightgbm nrounds=350 num_leaves=31 max_depth=5 learning_rate=0.06 feat_frac=0.8 bag_frac=0.8 seed=42 | **18685.91** | 3.05600 | 19.6 |
-| CatBoost | catboost iterations=350 depth=5 learning_rate=0.06 rsm=0.8 subsample=0.8 seed=42 | **18862.16** | 3.09300 | 9.2 |
-| Naive Bayes (`e1071`) | e1071 naiveBayes on 26 TOTEXP quantile bins (train); test pred = posterior mean of bin means (not... | **31787.66** | 3.18650 | 13.4 |
+| XGBoost | xgboost nrounds=350 max_depth=5 eta=0.06 | **11765.37** | 2.95110 | 556.2 |
+| Random forest (`ranger`) | ranger num.trees=300 mtry=50 min.node.size=3 seed=42 | **12733.24** | 3.16390 | 613.8 |
+| LightGBM | lightgbm nrounds=350 num_leaves=31 max_depth=5 learning_rate=0.06 feat_frac=0.8 bag_frac=0.8 seed=42 | **11772.97** | 3.01310 | 20.9 |
+| CatBoost | catboost iterations=350 depth=5 learning_rate=0.06 rsm=0.8 subsample=0.8 seed=42 | **12256.28** | 3.09650 | 9.9 |
+| Naive Bayes (`e1071`) | e1071 naiveBayes on 26 TOTEXP quantile bins (train); test pred = posterior mean of bin means (not... | **25959.49** | 3.18310 | 55.8 |
 
 ## Pooled data (full PCs / many columns)
 

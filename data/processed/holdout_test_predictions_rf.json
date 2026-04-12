@@ -2,12 +2,12 @@
   "input_train": "data/processed/selection_train.parquet",
   "input_test": "data/processed/selection_test.parquet",
   "n_train": 50000,
-  "n_test": 2000,
+  "n_test": 10000,
   "n_pc": 220,
   "model": "rf",
   "fit_note": "ranger num.trees=300 mtry=50 min.node.size=3 seed=42",
-  "RMSE_test_levels": 19030.275,
-  "RMSLE_test_log1p": 3.0842,
-  "elapsed_seconds": 627.322,
+  "RMSE_test_levels": 12733.2378,
+  "RMSLE_test_log1p": 3.1639,
+  "elapsed_seconds": 613.843,
   "output_parquet": "data/processed/holdout_test_predictions_rf.parquet"
 }

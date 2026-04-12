@@ -1,7 +1,7 @@
 {
   "mode": "train_test_holdout",
   "n_train": 50000,
-  "n_test": 2000,
+  "n_test": 10000,
   "n_pc": 220,
   "seed": 42,
   "pca_fitted_on": "train_only",

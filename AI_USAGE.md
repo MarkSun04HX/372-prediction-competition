@@ -346,6 +346,16 @@
 
 ---
 
+## 2026-04-12 — Holdout test set 10k rows; refreshed metrics + CV markdown
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) **Extend test to 10,000** samples, report test RMSEs, log usage; later **commit and push** current progress.
+- **Output summary:** Rebuilt selection data with **`N_TRAIN=50000`**, **`N_TEST=10000`** (**`SEED=42`**, PCA on train only, ~**10.6 min**). Re-ran **`run_elasticnet_holdout.R`** and one-shot **`run_holdout_predict_pcs.R`** for **XGB, RF, LGB, CatBoost, NB**. Example **test RMSE (levels)** on the new split: **glmnet α=0.25 ≈ 11,672**; **default XGB ≈ 11,765**; **LGB ≈ 11,773**; **CatBoost ≈ 12,256**; **RF ≈ 12,733**; **NB ≈ 25,959**. Regenerated **`CV_RMSE_RESULTS.md`** from JSON. **`xgb_tuning_holdout` grid** may still be from an older test size until re-run completes.
+- **What I used:** New holdout redraws **60k** distinct pooled rows (train+test disjoint); metrics are **not** comparable to the previous **52k**-draw / **2k**-test runs without re-aligning splits.
+- **Verification:** `build_cv_rmse_results_md.R` exit 0; committed **`selection_train_test_manifest.json`**, holdout JSON/CSVs, **`CV_RMSE_RESULTS.md`**.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
