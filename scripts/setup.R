@@ -17,7 +17,10 @@ repo_root <- function() {
 }
 
 setup_install <- function() {
-  pkgs <- c("haven", "arrow", "dplyr", "jsonlite", "glmnet", "irlba", "ranger", "xgboost", "rpart")
+  pkgs <- c(
+    "haven", "arrow", "dplyr", "jsonlite", "glmnet", "irlba",
+    "ranger", "xgboost", "lightgbm", "rpart"
+  )
   miss <- pkgs[!vapply(pkgs, function(p) requireNamespace(p, quietly = TRUE), logical(1))]
   if (length(miss)) {
     install.packages(miss, repos = "https://cloud.r-project.org")

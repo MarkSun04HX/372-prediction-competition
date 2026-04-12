@@ -6,6 +6,7 @@
 #   Rscript scripts/tuning/run_holdout_predict_pcs.R
 #   MODEL=glmnet Rscript scripts/tuning/run_holdout_predict_pcs.R   # ridge glmnet on PCs
 #   MODEL=rf Rscript scripts/tuning/run_holdout_predict_pcs.R     # ranger (same defaults as run_rf_xgb_selection.R)
+#   MODEL=lgb Rscript scripts/tuning/run_holdout_predict_pcs.R    # LightGBM (defaults aligned with default XGB)
 #   MODEL=xgb NROUNDS=350 MAX_DEPTH=5 ETA=0.06 Rscript scripts/tuning/run_holdout_predict_pcs.R
 
 suppressPackageStartupMessages({
@@ -29,6 +30,7 @@ if (!file.exists(path_tr) || !file.exists(path_te)) {
 
 model <- tolower(Sys.getenv("MODEL", unset = "xgb"))
 if (identical(model, "ranger")) model <- "rf"
+if (identical(model, "lightgbm")) model <- "lgb"
 
 read_xy <- function(path) {
   df <- arrow::read_parquet(path, as_data_frame = TRUE)
@@ -83,6 +85,42 @@ if (identical(model, "glmnet")) {
     "ranger num.trees=%s mtry=%s min.node.size=%s seed=%s",
     num_trees, mtry, min_node, rf_seed
   )
+} else if (identical(model, "lgb")) {
+  if (!requireNamespace("lightgbm", quietly = TRUE)) stop("install.packages('lightgbm')")
+  nrounds <- as.integer(Sys.getenv("LGB_NROUNDS", unset = Sys.getenv("NROUNDS", unset = "350")))
+  num_leaves <- as.integer(Sys.getenv("LGB_NUM_LEAVES", unset = "31"))
+  max_depth <- as.integer(Sys.getenv("LGB_MAX_DEPTH", unset = Sys.getenv("MAX_DEPTH", unset = "5")))
+  lr <- as.numeric(Sys.getenv("LGB_LEARNING_RATE", unset = Sys.getenv("ETA", unset = "0.06")))
+  feat_frac <- as.numeric(Sys.getenv("LGB_FEATURE_FRACTION", unset = "0.8"))
+  bag_frac <- as.numeric(Sys.getenv("LGB_BAGGING_FRACTION", unset = "0.8"))
+  bag_freq <- as.integer(Sys.getenv("LGB_BAGGING_FREQ", unset = "1"))
+  lgb_seed <- as.integer(Sys.getenv("LGB_SEED", unset = "42"))
+  nthread <- max(1L, parallel::detectCores() - 1L)
+  dtrain <- lightgbm::lgb.Dataset(tr$X, label = tr$y, free_raw_data = FALSE)
+  params <- list(
+    objective = "regression",
+    metric = "l2",
+    learning_rate = lr,
+    num_leaves = num_leaves,
+    max_depth = max_depth,
+    feature_fraction = feat_frac,
+    bagging_fraction = bag_frac,
+    bagging_freq = bag_freq,
+    verbosity = -1L,
+    num_threads = nthread,
+    seed = lgb_seed
+  )
+  fit <- lightgbm::lgb.train(
+    params = params,
+    data = dtrain,
+    nrounds = nrounds,
+    verbose = -1L
+  )
+  pred <- as.numeric(predict(fit, te$X))
+  fit_note <- sprintf(
+    "lightgbm nrounds=%s num_leaves=%s max_depth=%s learning_rate=%s feat_frac=%s bag_frac=%s seed=%s",
+    nrounds, num_leaves, max_depth, lr, feat_frac, bag_frac, lgb_seed
+  )
 } else {
   if (!requireNamespace("xgboost", quietly = TRUE)) stop("install.packages('xgboost')")
   nrounds <- as.integer(Sys.getenv("NROUNDS", unset = "350"))
@@ -115,7 +153,13 @@ out_df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-stem <- if (identical(model, "rf")) "holdout_test_predictions_rf" else "holdout_test_predictions"
+stem <- if (identical(model, "rf")) {
+  "holdout_test_predictions_rf"
+} else if (identical(model, "lgb")) {
+  "holdout_test_predictions_lgb"
+} else {
+  "holdout_test_predictions"
+}
 out_pq <- file.path(root, "data", "processed", paste0(stem, ".parquet"))
 arrow::write_parquet(out_df, out_pq)
 

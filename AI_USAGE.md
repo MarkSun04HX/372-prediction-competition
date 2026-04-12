@@ -326,6 +326,16 @@
 
 ---
 
+## 2026-04-12 — LightGBM one-shot holdout on PCs + AI log
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Try **LightGBM** once; **record** interactions and **test results**.
+- **Output summary:** Added **`MODEL=lgb`** (**`lightgbm`**) to **`run_holdout_predict_pcs.R`**: **350** rounds, **`learning_rate=0.06`**, **`num_leaves=31`**, **`max_depth=5`**, **`feature_fraction`/`bagging_fraction=0.8`**, **`bagging_freq=1`**, **`seed=42`** (env **`LGB_*`** overrides). Writes **`holdout_test_predictions_lgb.parquet`** / **`.json`**. **`lightgbm`** added to **`scripts/setup.R`** install list. Ran **`env MODEL=lgb Rscript ...`** on **50k** train / **2k** test PCs: **test RMSE ≈ 18,685.91**, **RMSLE ≈ 3.056**, **~22 s** wall time. Compared to the same-run defaults: **XGB ≈ 17,640**, **RF ≈ 19,030** — LightGBM sits **between** RF and XGB on this split.
+- **What I used:** Same **`selection_train.parquet`** / **`selection_test.parquet`** as prior holdouts; Parquet outputs remain gitignored; **`.json`** committed for metrics.
+- **Verification:** `MODEL=lgb Rscript scripts/tuning/run_holdout_predict_pcs.R` exit **0**; **`holdout_test_predictions_lgb.json`** written.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
