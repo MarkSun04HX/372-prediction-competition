@@ -6,6 +6,7 @@
 | `raw/stata_zips/` | Downloaded **Stata** zips from MEPS when you run `process_meps_for_modeling.R --download` (safe to delete after processing). |
 | `raw/stata/` | Extracted `.dta` trees (safe to delete after processing). |
 | `processed/` | **`meps_fyc_{2019..2023}_for_modeling.parquet`** — per-year tables (competition exclusions applied; **`PERWTyyF`**, **`VARSTR`**, **`VARPSU`**, **`BRR*`** removed). **`meps_fyc_2019_2023_pooled_for_modeling.parquet`** — all years **stacked** with calendar-year suffixes stripped (`TOTEXP` = target, `FYC_YEAR` = row source year). See `processing_manifest.json` and `pooling_manifest.json`. |
+| `processed/selection_data.parquet` | **Selection data:** **10,000** random rows from the pooled file, **`PC1`–`PC220`** from PCA (`irlba`) fit on that sample’s numeric predictors, plus **`TOTEXP`** and **`FYC_YEAR`**. Built by `scripts/build_selection_data.R` (gitignored like other `.parquet`). |
 | `reference/` | Optional downloaded docs, etc. |
 
 ## Build modeling-ready Parquet (R)
@@ -41,6 +42,23 @@ Rscript scripts/run_pca_dimension_reduction.R --max-rows=30000
 ```
 
 Writes `processed/pca_dimension_report.json` and prints how many **PCs** capture 90% / 95% of eigenvalue mass on that slice. The number of raw numeric columns kept depends on the slice (constant columns on a small head window are dropped).
+
+**Selection dataset** (10k rows, 220 PCs + target):
+
+```bash
+Rscript scripts/build_selection_data.R
+# Optional: SEED=42 N_ROW=10000 N_PC=220 Rscript scripts/build_selection_data.R
+```
+
+Output: `processed/selection_data.parquet` (**10,000 × 222**: `PC1`…`PC220`, `TOTEXP`, `FYC_YEAR`). PCA is fit **only on this sample** (for a strict CV pipeline, fit PCA inside training folds instead).
+
+**Lasso / elastic net CV RMSE** on `selection_data` (PCs only, `TOTEXP` in levels):
+
+```bash
+Rscript scripts/run_lasso_elasticnet_selection.R
+```
+
+Writes `processed/selection_elasticnet_alpha_grid_cv.json`: **five** `alpha` values **(0, 0.25, 0.5, 0.75, 1)** — each gets its own **CV over λ** (`lambda.min`) and **`cv_rmse_levels`** = sqrt(CV MSE at that λ).
 
 When fitting on **per-year** files, use **`TOTEXP{yy}`** as **`y`**. On the **pooled** file, use **`TOTEXP`**. Do not use the expenditure target as a predictor in **`X`**.
 

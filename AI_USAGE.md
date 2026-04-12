@@ -226,6 +226,16 @@
 
 ---
 
+## 2026-04-12 — Commit selection scripts, CV JSON, data README, R deps
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Commit the current changes and push them.
+- **Output summary:** Staged and pushed **`scripts/build_selection_data.R`**, **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**, **`data/README.md`** (selection dataset + elastic-net CV docs), **`scripts/install_r_dependencies.R`** (**`ranger`**, **`xgboost`**), and **`data/processed/`** CV metric JSON (**`selection_elasticnet_alpha_grid_cv.json`**, **`selection_lasso_elasticnet_cv.json`**, **`selection_rpart_cv.json`**).
+- **What I used:** Large Parquet outputs remain gitignored per **`.gitignore`**.
+- **Verification:** `git push` on **`main`**.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

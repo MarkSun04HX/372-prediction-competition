@@ -1,0 +1,18 @@
+{
+  "input": "data/processed/selection_data.parquet",
+  "n_rows": 10000,
+  "n_features": 220,
+  "nfolds": 10,
+  "type_measure": "mse",
+  "cv_rmse_note": "sqrt(cv MSE) at lambda.min from cv.glmnet",
+  "lasso": {
+    "alpha": 1,
+    "lambda_min": 86.9438,
+    "cv_rmse": 16369.3479
+  },
+  "elastic_net": {
+    "alpha": 0.5,
+    "lambda_min": 173.8877,
+    "cv_rmse": 16342.5395
+  }
+}
