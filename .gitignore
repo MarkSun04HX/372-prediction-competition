@@ -1,9 +1,6 @@
 .cursor/
 data/processed
-
-# MEPS ASCII PUFs: several years exceed GitHub’s 100 MB per-file limit — keep local copies only
-data/raw/ascii/*.dat
-data/raw/ascii/*.DAT
+config/
 
 # Editor
 .DS_Store
