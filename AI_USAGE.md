@@ -376,6 +376,26 @@
 
 ---
 
+## 2026-04-13 — Move five MEPS ASCII `.dat` files into `data/raw/ascii/`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Add the five `.dat` datasets to the raw data directory.
+- **Output summary:** Moved **`H224.DAT`**, **`h216.dat`**, **`h233.dat`**, **`h243.dat`**, and **`h251.dat`** from the repository root into **`data/raw/ascii/`** (the documented location for optional MEPS ASCII PUFs).
+- **What I used:** `ls` to confirm paths, then **`mv`** of all five files into **`data/raw/ascii/`**.
+- **Verification:** `ls data/raw/ascii/` shows all five files plus **`.gitkeep`**.
+
+---
+
+## 2026-04-13 — Commit and push (ASCII too large for GitHub)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Commit and push.
+- **Output summary:** **`h216.dat`**, **`h233.dat`**, and **`H224.DAT`** are each **> 100 MB**, so GitHub would reject them as normal git blobs. Committed **`AI_USAGE.md`** (prior log entry) and **`.gitignore`** rules for **`data/raw/ascii/*.dat`** / **`*.DAT`** so local MEPS ASCII stays out of the remote. Pushed **`main`** to **`origin`**.
+- **What I used:** `git status`, file size check, **`git add` / `git commit` / `git push`**. Verified **`git-lfs`** is not installed (LFS would be an alternative for hosting large binaries).
+- **Verification:** `git push` succeeded; working tree clean aside from ignored local **`.dat`** files.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
