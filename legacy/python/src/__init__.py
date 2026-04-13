@@ -1,1 +1,0 @@
-# MEPS prediction competition package

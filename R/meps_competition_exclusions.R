@@ -1,5 +1,5 @@
 # ECN372 competition exclusions (MEPS Section 2.5.11 + survey design).
-# Mirrors legacy/python logic; source this file from R scripts.
+# Canonical R implementation; source this file from R scripts.
 
 meps_default_yy <- function() c("19", "20", "21", "22", "23")
 

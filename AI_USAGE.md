@@ -356,6 +356,16 @@
 
 ---
 
+## 2026-04-13 — Remove Python artifacts; enforce R-only repo
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) The project is in R, so no Python scripts or affiliates should be allowed; remove all Python-related work.
+- **Output summary:** Deleted the full `legacy/python/` implementation files (`process_meps_for_modeling.py`, `pool_meps_parquets.py`, `run_linear_baselines.py`, exclusion helpers, and related docs/requirements). Updated `README.md` to remove the Python mirror note, removed Python-specific ignore rules from `.gitignore`, and updated `R/meps_competition_exclusions.R` comments so R is treated as the canonical implementation.
+- **What I used:** Keep pipeline and documentation focused on `Rscript scripts/setup.R` and `R/` sources only.
+- **Verification:** Searched repo for Python scripts and Python pipeline references after edits; no active Python workflow files remain.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
