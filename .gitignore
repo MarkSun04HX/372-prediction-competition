@@ -5,6 +5,7 @@ data/raw/stata/**/*.dta
 data/raw/stata_zips/*.zip
 data/processed/*.parquet
 .cursor/
+data/processed
 
 # Python
 .venv/
