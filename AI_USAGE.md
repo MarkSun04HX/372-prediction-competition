@@ -396,6 +396,26 @@
 
 ---
 
+## 2026-04-13 — Rewrite data cleaning script (exclusion helper rename + `01_clean-data.R`)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Re-read the competition instructions PDF; rewrite the `src/` cleaning script so it clearly reads raw `.dta` files, combines them, drops excluded variables, and outputs to `data/processed/`. Rename the exclusion helper to a clean name; put the pipeline script under `scripts/` numbered `01_`.
+- **Output summary:** Renamed `src/meps_competition_exclusions.R` → `src/exclusion_helpers.R` (same contents: exclusion stems, expanded-name builder, harmonization). Created `scripts/01_clean-data.R`: loads `haven`/`arrow`/`dplyr`, sources `src/exclusion_helpers.R`, loops over the 5 raw Stata files (h216–h251), extracts `TOTEXPyy` as `TOTEXP`, drops all Section 2.5.11 + survey-design columns, harmonizes year-suffixed names, adds `FYC_YEAR`, row-binds into one pooled data frame, and writes `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`.
+- **What I used:** Run `Rscript scripts/01_clean-data.R` from repo root; output Parquet matches downstream tuning script expectations.
+- **Verification:** File structure and sourcing verified; full data run pending.
+
+---
+
+## 2026-04-13 — Add `src/install_packages.R` + `make install` target
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) `library(arrow)` fails because the package is not installed; write a helper under `src/` that checks and installs all required packages.
+- **Output summary:** Created `src/install_packages.R`: checks all project packages (`haven`, `arrow`, `dplyr`, `glmnet`, `irlba`, `ranger`, `xgboost`, `lightgbm`, `catboost`, `e1071`, `rpart`, `jsonlite`); installs any missing ones from CRAN; handles `catboost` (not on CRAN) with a manual install message. Added `make install` target to `Makefile` that runs `Rscript src/install_packages.R`.
+- **What I used:** Run `make install` (or `Rscript src/install_packages.R`) before running any pipeline script; then `make clean` to build the pooled dataset.
+- **Verification:** N/A (install run pending by user).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
