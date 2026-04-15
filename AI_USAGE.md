@@ -416,6 +416,16 @@
 
 ---
 
+## 2026-04-15 — Point clean script at `exclude_variables.R`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Point `01_clean-data.R` at `exclude_variables.R` instead of the missing `exclusion_helpers.R`.
+- **Output summary:** Updated `scripts/01_clean-data.R` to `source(file.path(root, "src", "exclude_variables.R"))`, which defines the same helpers (`meps_expanded_exclusion_names`, `meps_survey_design_present`, `meps_harmonize_names`).
+- **What I used:** Read `src/exclude_variables.R` and `scripts/01_clean-data.R` to confirm symbol compatibility.
+- **Verification:** `make clean` / `Rscript scripts/01_clean-data.R` should run once raw `.dta` files are present (not executed here).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

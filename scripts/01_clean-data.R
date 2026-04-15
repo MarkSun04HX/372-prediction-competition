@@ -20,7 +20,7 @@ script_dir <- tryCatch({
 }, error = function(e) ".")
 
 root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
-source(file.path(root, "src", "exclusion_helpers.R"))
+source(file.path(root, "src", "exclude_variables.R"))
 
 # ---- Year-to-file mapping -------------------------------------------------
 
