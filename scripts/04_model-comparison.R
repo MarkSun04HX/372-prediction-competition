@@ -35,8 +35,16 @@ root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TR
 # ---- Config ------------------------------------------------------------------
 
 SEED    <- as.integer(Sys.getenv("SEED",    unset = "42"))
-N_CORES <- as.integer(Sys.getenv("N_CORES", unset = as.character(max(1L, parallel::detectCores() - 1L))))
 N_FOLDS <- as.integer(Sys.getenv("N_FOLDS", unset = "5"))
+
+# Detect allocated cores: respect SLURM allocation before falling back to
+# detectCores() (which returns the full node count, not the job allocation).
+.slurm_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = NA)))
+if (is.na(.slurm_cores)) {
+  .slurm_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_ON_NODE", unset = NA)))
+}
+.default_cores <- if (!is.na(.slurm_cores)) .slurm_cores else max(1L, parallel::detectCores() - 1L)
+N_CORES <- as.integer(Sys.getenv("N_CORES", unset = as.character(.default_cores)))
 
 set.seed(SEED)
 message("Config: seed=", SEED, "  cores=", N_CORES, "  folds=", N_FOLDS)
