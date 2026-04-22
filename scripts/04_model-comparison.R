@@ -174,8 +174,9 @@ grid_rf <- tidyr::expand_grid(
 # Finalize mtry range against actual predictor count.
 make_boost_grid <- function(wf, p_count, size = 150L) {
   param_set <- hardhat::extract_parameter_set_dials(wf)
-  # Override mtry range with data-derived bounds
-  param_set <- dials::update(
+  # Override mtry range with data-derived bounds.
+  # update() dispatches to dials' S3 method — must NOT be namespace-qualified.
+  param_set <- update(
     param_set,
     mtry = dials::mtry(range = c(max(1L, round(p_count * 0.05)),
                                   round(p_count * 0.80)))
