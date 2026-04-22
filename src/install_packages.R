@@ -17,6 +17,7 @@ pkgs <- c(
   "catboost",  # gradient boosting (CatBoost)
   "e1071",     # naive Bayes
   "rpart",     # regression trees
+  "ggplot2",   # EDA plots
   "jsonlite"   # JSON manifest files
 )
 

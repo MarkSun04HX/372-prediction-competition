@@ -31,7 +31,7 @@ Build a model that predicts **total healthcare spending per person per year** as
 
 Each year has a **codebook and documentation** on the same download page—read them before serious modeling.
 
-**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. **Modeling-ready tables** use official **Stata** PUFs via **`Rscript scripts/setup.R process-meps`** (add **`--download`** to fetch zips) → **`data/processed/meps_fyc_{year}_for_modeling.parquet`** and **`processing_manifest.json`**. Stack years with **`Rscript scripts/setup.R pool`** → **`meps_fyc_2019_2023_pooled_for_modeling.parquet`**. Exclusion logic lives in **`R/meps_competition_exclusions.R`**; regenerate `config/excluded_columns_expanded.txt` with **`Rscript scripts/setup.R expand-exclusions`**. Baseline ridge RMSE: **`Rscript scripts/setup.R linear-baselines`**. Install CRAN deps once: **`Rscript scripts/setup.R install`**. See **`data/README.md`** and **`config/README.md`**.
+**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. Place official **Stata** Full-Year PUFs **`h216.dta` … `h251.dta`** under **`data/raw/`**, then run **`Rscript scripts/01_clean-data.R`** to build **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (exclusions and harmonization via **`src/exclude_variables.R`**). Install CRAN packages with **`Rscript src/install_packages.R`**. Exploratory summaries and plots: **`Rscript scripts/02_eda.R`** (CSVs under **`data/processed/`**, figures under **`outputs/figures/`**, both gitignored). See **`data/README.md`**.
 
 **Test set note:** The instructor’s test set is a **random sample from MEPS in prior years**; **which years are not disclosed**. Plan for **cross-year generalization**: harmonize variable names (suffixes change with year), validate on held-out years when possible, and avoid overfitting a single year’s quirks.
 
@@ -63,28 +63,29 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ## Data pipeline: how selections and variables are built (this repo)
 
-This section matches **`scripts/setup.R`** (ETL and installs) and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments), plus `R/meps_competition_exclusions.R`. It is the exact recipe for the pooled modeling table and for **`selection_data.parquet`** used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**, **`scripts/02_eda.R`**, and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments). Exclusion helpers live in **`src/exclude_variables.R`**. The pooled modeling table matches **`selection_data.parquet`** inputs used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
 
-### 1. Per-year modeling Parquet (`meps_fyc_{year}_for_modeling.parquet`)
+### 1. Install R packages
 
-**Command:** `Rscript scripts/setup.R process-meps` (optional trailing argument **`--download`**).
+**Command:** `Rscript src/install_packages.R`
 
-1. For each calendar year **2019–2023**, the script maps the year to MEPS PUF prefix **`h216` / `h224` / `h233` / `h243` / `h251`** and downloads **`https://meps.ahrq.gov/data_files/pufs/{puf}/{puf}dta.zip`** when `--download` is passed or the zip is missing.
-2. The zip is unpacked under **`data/raw/stata/{puf}/`**; the **`.dta`** file is read with **`haven::read_dta`** into an R `data.frame`.
-3. **Competition exclusions** are resolved with **`meps_expanded_exclusion_names()`** in `R/meps_competition_exclusions.R`: stems from codebook **Section 2.5.11** (charges, utilization, expenditure totals and components, etc.) are expanded with year suffixes **`19`–`23`**, plus **`PERWTyyF`**, **`VARSTR`**, **`VARPSU`**, and **`BRR1`–`BRR128`** for each `yy`. Any column whose name appears in that expanded set is **dropped**, **except** the year’s expenditure total used as the target: **`TOTEXP{yy}`** (e.g. `TOTEXP23`), which is **kept**.
-4. The script checks that no survey-design columns remain via **`meps_survey_design_present()`**; if any leak through, it **stops**.
-5. The result is written to **`data/processed/meps_fyc_{year}_for_modeling.parquet`**. **`processing_manifest.json`** records row count, column count, and paths.
+### 2. Pooled modeling table (`meps_fyc_2019_2023_pooled_for_modeling.parquet`)
 
-### 2. Pooled table (`meps_fyc_2019_2023_pooled_for_modeling.parquet`)
+**Command:** `Rscript scripts/01_clean-data.R`
 
-**Command:** `Rscript scripts/setup.R pool`.
+1. Expects **`data/raw/h216.dta`**, **`h224.dta`**, **`h233.dta`**, **`h243.dta`**, **`h251.dta`** (MEPS Full-Year Consolidated Stata files).
+2. For each year **2019–2023**, reads with **`haven::read_dta`**, drops excluded columns via **`meps_expanded_exclusion_names()`** from **`src/exclude_variables.R`** (codebook **Section 2.5.11** stems plus survey-design names), **keeping** the target **`TOTEXP{yy}`** which becomes **`TOTEXP`** after harmonization.
+3. **`meps_survey_design_present()`** must pass after drops.
+4. **`meps_harmonize_names(df, yy)`** strips year suffixes; **`FYC_YEAR`** is added; **`dplyr::bind_rows`** pools all years.
+5. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`**.
 
-1. Reads each yearly Parquet from **`data/processed/`**.
-2. For each year, renames columns with **`meps_harmonize_names(df, yy)`**: any column name that **ends with the two-digit year** `yy` has that suffix **stripped** (so `TOTEXP23` becomes **`TOTEXP`**, and other variables align across years). Duplicate names after harmonization cause a **hard stop**.
-3. Adds **`FYC_YEAR`** (calendar year) as an integer column and column-binds all years with **`dplyr::bind_rows`**.
-4. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** and **`data/processed/pooling_manifest.json`** (`target_column`: **`TOTEXP`**, `year_indicator_column`: **`FYC_YEAR`**).
+### 3. EDA (tabular + target distribution figure)
 
-### 3. Selection sample, train/test holdout, and PCA columns
+**Command:** `Rscript scripts/02_eda.R`
+
+Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**). Writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/figures/`** (gitignored with **`outputs/`**).
+
+### 4. Selection sample, train/test holdout, and PCA columns
 
 **Script:** `scripts/tuning/build_selection_data.R`. Environment variables: **`SEED`** (default **`42`**), **`N_PC`** (default **`220`**), and either **`N_TRAIN`** / **`N_TEST`** or legacy **`N_ROW`**.
 
@@ -102,7 +103,7 @@ This section matches **`scripts/setup.R`** (ETL and installs) and **`scripts/tun
 
 **Caveat:** The default holdout is **one random split**; metrics on the 2k test rows are **not** cross-validated. For model comparison, either repeat with different seeds or use nested CV if you need variance estimates.
 
-### 4. CV summaries and `CV_RMSE_RESULTS.md`
+### 5. CV summaries and `CV_RMSE_RESULTS.md`
 
 Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`** (training rows only when the holdout build was used), take **`PC*`** as predictors and **`TOTEXP`** as the response, and write JSON under **`data/processed/`**. **`run_xgb_tune_holdout.R`** fits and tunes **XGBoost** on **`selection_train.parquet`** and scores **`selection_test.parquet`** (no 10-fold loop). **`build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`**.
 

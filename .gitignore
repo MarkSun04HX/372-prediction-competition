@@ -1,5 +1,6 @@
 .cursor/
 data/processed
+outputs/
 config/
 
 # Editor

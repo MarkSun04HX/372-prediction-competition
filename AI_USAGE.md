@@ -426,6 +426,46 @@
 
 ---
 
+## 2026-04-15 — Draft modeling & variable selection plan in PLAN.md
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Given the project background (~1,972 predictors, RMSLE metric, zero-inflated healthcare spending), propose models and variable selection strategies and write them into `PLAN.md`.
+- **Output summary:** Wrote `PLAN.md` covering four phases: (1) variable selection — mechanical filters, correlation filter, XGBoost gain importance, LASSO screening producing feature sets A–D; (2) six candidate models — ridge/elastic net on log(1+y), two-part model, XGBoost with `reg:squaredlog`, LightGBM with Tweedie/log target, random forest on log(1+y), stacking/blending; (3) validation strategy — 5-fold CV on RMSLE, leave-one-year-out CV, final holdout; (4) post-processing — clip negatives, back-transform from log scale.
+- **What I used:** Reviewed existing `CV_RMSE_RESULTS.md`, `README.md`, `src/exclude_variables.R`, and `scripts/tuning/` to understand prior work and limitations (PCA-only features, squared-error objectives, 10k subsample).
+- **Verification:** Plan is documentation only; no scripts executed.
+
+---
+
+## 2026-04-20 — EDA: variance summary + correlation CSV
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Implement the plan: EDA script with per-variable SD summary (near-zero variance screening) and a CSV of pairwise correlations between variables.
+- **Output summary:** Added (now [`scripts/02_eda.R`](scripts/02_eda.R); was `03_eda_variance_correlation.R`): reads pooled Parquet; coerces `haven_labelled` numerics via `haven::zap_labels`; writes [`data/processed/eda_sd_summary.csv`](data/processed/eda_sd_summary.csv) (1,959 rows: predictors + `TOTEXP`/`FYC_YEAR`) with `mean`, `median`, `sd`, missingness, `n_unique`, `pct_top_value`, `is_binary`; writes [`data/processed/eda_correlation_long.csv`](data/processed/eda_correlation_long.csv) (upper triangle, `abs(r) >= 0.1`, sorted by `|r|`) from a 30k-row subsample with median imputation. Console reports SD thresholds and counts of `|r| > 0.9` / `> 0.95`.
+- **What I used:** Plan spec; existing patterns from [`scripts/02_eda.R`](scripts/02_eda.R) (median impute) and [`scripts/tuning/build_selection_data.R`](scripts/tuning/build_selection_data.R) (subsample size).
+- **Verification:** `Rscript scripts/02_eda.R` completed successfully; `wc -l` shows 1,960 lines on `eda_sd_summary.csv` and 348,732 lines on `eda_correlation_long.csv` (incl. headers).
+
+---
+
+## 2026-04-20 — EDA script: distinct vars in high-|r| pairs
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Extend EDA script to print how many distinct variables appear in pairs with `|r| > 0.9` (and related thresholds).
+- **Output summary:** After the existing correlation pair counts, the script loops thresholds 0.9, 0.95, and 0.99, unions `var1`/`var2` from `long_df` rows with `abs(pearson_r) > thr`, and prints distinct name counts (e.g. 1,204 at `|r|>0.9` on the 30k subsample run).
+- **What I used:** Same `long_df` as written to `eda_correlation_long.csv` (pairs with `abs(r) >= CORR_MIN_ABS`, default 0.1).
+- **Verification:** `Rscript scripts/02_eda.R` completed; console shows the new “Distinct variables in high-|r| pairs” block.
+
+---
+
+## 2026-04-20 — ggplot2 target plot, `outputs/` gitignore, remove `setup.R`, doc refresh
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Implement plan: TOTEXP vs `log(1+y)` distribution figure with ggplot2 to `outputs/figures/`, add `ggplot2` to `src/install_packages.R`, gitignore `outputs/`, update `PLAN.md` and README for `01` / `02` / `src` pipeline, delete `scripts/setup.R`, repoint tuning and CV hint text.
+- **Output summary:** [`.gitignore`](.gitignore) now includes **`outputs/`**; [`src/install_packages.R`](src/install_packages.R) lists **`ggplot2`**; [`scripts/02_eda.R`](scripts/02_eda.R) writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** (after `TOTEXP` check) via **`facet_wrap`**, updated file header; removed [`scripts/setup.R`](scripts/setup.R). Updated [`README.md`](README.md) data pipeline, [`PLAN.md`](PLAN.md) current state and 1a, [`scripts/tuning/README.md`](scripts/tuning/README.md), [`CV_RMSE_RESULTS.md`](CV_RMSE_RESULTS.md) and [`build_cv_rmse_results_md.R`](scripts/tuning/build_cv_rmse_results_md.R) pooled ridge hint.
+- **What I used:** Plan attachment; existing [`scripts/01_clean-data.R`](scripts/01_clean-data.R) behavior for README accuracy.
+- **Verification:** `Rscript src/install_packages.R` then `Rscript scripts/02_eda.R` exit 0; PNG exists at **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** (1500×600).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

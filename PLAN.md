@@ -5,7 +5,8 @@
 - **Data:** `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet` — 126,003 rows x 1,974 columns (target: `TOTEXP`, year indicator: `FYC_YEAR`, ~1,972 candidate predictors).
 - **Metric:** RMSLE — rewards proportional accuracy across the full spending distribution (zeros through high spenders).
 - **Prior experiments** (in `CV_RMSE_RESULTS.md`): All models trained on **220 PCA components** from a 10k-row subsample. Best holdout results: XGBoost (RMSLE 2.95, test RMSE $11,765), LightGBM (RMSLE 3.01), CatBoost (RMSLE 3.10).
-- **EDA already in repo:** `scripts/03_eda_variance_correlation.R` writes `eda_sd_summary.csv` (per-column SD, missingness, uniqueness, `pct_top_value`) and `eda_correlation_long.csv` (pairwise Pearson on a 30k subsample). Use these as inputs to targeted follow-up EDA; do not re-derive everything from scratch.
+- **Pipeline (no `scripts/setup.R`):** install **`Rscript src/install_packages.R`**; build pooled Parquet **`Rscript scripts/01_clean-data.R`** (sources **`src/exclude_variables.R`**); EDA **`Rscript scripts/02_eda.R`**.
+- **EDA artifacts:** `scripts/02_eda.R` writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**) and ggplot figures such as **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/`** (gitignored). Use the CSVs for targeted follow-up EDA; do not re-derive everything from scratch.
 
 ---
 
@@ -17,6 +18,7 @@
 
 Full distributions are tractable for a single outcome:
 
+- **Automated:** `scripts/02_eda.R` writes side-by-side histograms of **raw** `TOTEXP` and **`log(1 + TOTEXP)`** to **`outputs/figures/`** (local only; not versioned).
 - Histogram or density of **raw** `TOTEXP` (expect extreme right skew).
 - Same for **`log(1 + TOTEXP)`** (closer to Gaussian; aligns with RMSLE).
 - **Zero mass:** share of rows with `TOTEXP == 0`; informs how hard RMSLE will be on small predictions near zero.
