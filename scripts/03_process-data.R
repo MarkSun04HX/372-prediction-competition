@@ -43,6 +43,24 @@ if ("TOTEXP_LOG1P" %in% names(df)) {
 
 df$TOTEXP_LOG1P <- log1p(tot)
 
+# ---- Drop character ID columns (person/family identifiers, not predictors) ----
+
+id_cols <- grep("^(DUPERSID|FAMID|FAMIDYR|CPSFAMID|RULETR)", names(df), value = TRUE)
+if (length(id_cols)) {
+  df <- df[, setdiff(names(df), id_cols), drop = FALSE]
+  message("Dropped ", length(id_cols), " ID character columns: ", paste(id_cols, collapse = ", "))
+}
+
+# ---- Drop zero-variance numeric columns (constant across full pooled dataset) ----
+
+num_mask <- vapply(df, is.numeric, logical(1L))
+num_vars <- vapply(df[num_mask], var, numeric(1L), na.rm = TRUE)
+zv_cols  <- names(num_vars)[num_vars == 0 | is.na(num_vars)]
+if (length(zv_cols)) {
+  df <- df[, setdiff(names(df), zv_cols), drop = FALSE]
+  message("Dropped ", length(zv_cols), " zero-variance columns: ", paste(zv_cols, collapse = ", "))
+}
+
 arrow::write_parquet(df, out_path)
 
 message("\nDone. Wrote ", out_path)

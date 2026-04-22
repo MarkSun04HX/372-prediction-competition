@@ -6,19 +6,25 @@
 #   Rscript src/install_packages.R
 
 pkgs <- c(
-  "haven",     # read Stata .dta files
-  "arrow",     # read/write Parquet
-  "dplyr",     # bind_rows and data manipulation
-  "glmnet",    # lasso / elastic net
-  "irlba",     # truncated SVD / PCA
-  "ranger",    # random forest
-  "xgboost",   # gradient boosting
-  "lightgbm",  # gradient boosting (LightGBM)
-  "catboost",  # gradient boosting (CatBoost)
-  "e1071",     # naive Bayes
-  "rpart",     # regression trees
-  "ggplot2",   # EDA plots
-  "jsonlite"   # JSON manifest files
+  "haven",       # read Stata .dta files
+  "arrow",       # read/write Parquet
+  "dplyr",       # bind_rows and data manipulation
+  "glmnet",      # lasso / elastic net (glmnet engine for parsnip)
+  "irlba",       # truncated SVD / PCA
+  "ranger",      # random forest (ranger engine for parsnip)
+  "xgboost",     # gradient boosting (xgboost engine for parsnip)
+  "lightgbm",    # gradient boosting (LightGBM)
+  "catboost",    # gradient boosting (CatBoost)
+  "e1071",       # naive Bayes
+  "rpart",       # regression trees
+  "ggplot2",     # EDA plots
+  "jsonlite",    # JSON manifest files
+  # tidymodels ecosystem
+  "tidymodels",  # meta-package: rsample, recipes, parsnip, tune, yardstick, dials, workflows
+  "bonsai",      # LightGBM engine for parsnip (boost_tree with engine = "lightgbm")
+  "doFuture",    # foreach parallel backend backed by future (used by tune_grid)
+  "finetune",    # tune_race_anova for faster hyperparameter search
+  "vip"          # variable importance plots
 )
 
 missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1L), quietly = TRUE)]
@@ -28,9 +34,15 @@ if (length(missing) == 0L) {
 } else {
   message("Installing missing packages: ", paste(missing, collapse = ", "))
   install.packages(
-    setdiff(missing, c("lightgbm", "catboost")),
+    setdiff(missing, c("lightgbm", "catboost", "bonsai")),
     repos = "https://cloud.r-project.org"
   )
+
+  if ("bonsai" %in% missing) {
+    if (!requireNamespace("bonsai", quietly = TRUE)) {
+      install.packages("bonsai", repos = "https://cloud.r-project.org")
+    }
+  }
 
   if ("lightgbm" %in% missing) {
     if (!requireNamespace("lightgbm", quietly = TRUE)) {
