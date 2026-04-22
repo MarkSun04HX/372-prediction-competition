@@ -2,10 +2,11 @@
 
 ## Current state
 
-- **Data:** `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet` — 126,003 rows x 1,974 columns (target: `TOTEXP`, year indicator: `FYC_YEAR`, ~1,972 candidate predictors).
+- **Data (raw-scale target):** `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet` — 126,003 rows x 1,974 columns (target: `TOTEXP`, year indicator: `FYC_YEAR`, ~1,972 candidate predictors).
+- **Data (with log target column):** `data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet` — same rows/columns as above **plus** **`TOTEXP_LOG1P`** = `log1p(TOTEXP)` from **`scripts/03_process-data.R`**. Use for Phase 2 models that train on **`log(1+y)`**; keep **`TOTEXP`** for RMSLE and submission back-transform.
 - **Metric:** RMSLE — rewards proportional accuracy across the full spending distribution (zeros through high spenders).
 - **Prior experiments** (in `CV_RMSE_RESULTS.md`): All models trained on **220 PCA components** from a 10k-row subsample. Best holdout results: XGBoost (RMSLE 2.95, test RMSE $11,765), LightGBM (RMSLE 3.01), CatBoost (RMSLE 3.10).
-- **Pipeline (no `scripts/setup.R`):** install **`Rscript src/install_packages.R`**; build pooled Parquet **`Rscript scripts/01_clean-data.R`** (sources **`src/exclude_variables.R`**); EDA **`Rscript scripts/02_eda.R`**.
+- **Pipeline (no `scripts/setup.R`):** install **`Rscript src/install_packages.R`**; build pooled Parquet **`Rscript scripts/01_clean-data.R`** (sources **`src/exclude_variables.R`**); add **`TOTEXP_LOG1P`** with **`Rscript scripts/03_process-data.R`**; EDA **`Rscript scripts/02_eda.R`** (reads **non-processed** pooled file only).
 - **EDA artifacts:** `scripts/02_eda.R` writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**) and ggplot figures such as **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/`** (gitignored). Use the CSVs for targeted follow-up EDA; do not re-derive everything from scratch.
 
 ---

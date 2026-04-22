@@ -466,6 +466,16 @@
 
 ---
 
+## 2026-04-22 — `scripts/03_process-data.R`: `TOTEXP_LOG1P` parquet for modeling
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Add `03_process-data` script to transform/add log target for downstream prediction without breaking `02_eda.R`.
+- **Output summary:** Added [`scripts/03_process-data.R`](scripts/03_process-data.R): reads [`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`](data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet), keeps **`TOTEXP`**, sets **`TOTEXP_LOG1P`** = `log1p(TOTEXP)` (with `haven::zap_labels` when needed), writes [`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`](data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet). Updated [`README.md`](README.md) pipeline (new §3 processed table; EDA §4), [`PLAN.md`](PLAN.md) current state, [`Makefile`](Makefile) `clean` runs **`03`** after **`01`**. Tuning scripts unchanged (still read base pooled unless migrated later).
+- **What I used:** Plan spec; pattern from [`scripts/02_eda.R`](scripts/02_eda.R) for root resolution and labelled coercion.
+- **Verification:** `Rscript scripts/03_process-data.R`; `max|TOTEXP_LOG1P - log1p(TOTEXP)| = 0`; **`ncol` = 1975** vs 1974 base.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

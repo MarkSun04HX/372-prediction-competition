@@ -60,6 +60,8 @@ for (i in seq_len(nrow(year_map))) {
          paste(leaked, collapse = ", "))
   }
 
+  df <- meps_recode_sentinels(df)
+
   df <- meps_harmonize_names(df, yy)
   if (!"TOTEXP" %in% names(df)) stop("TOTEXP missing after harmonization for year ", yr)
 

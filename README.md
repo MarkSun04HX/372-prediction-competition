@@ -31,7 +31,7 @@ Build a model that predicts **total healthcare spending per person per year** as
 
 Each year has a **codebook and documentation** on the same download page—read them before serious modeling.
 
-**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. Place official **Stata** Full-Year PUFs **`h216.dta` … `h251.dta`** under **`data/raw/`**, then run **`Rscript scripts/01_clean-data.R`** to build **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (exclusions and harmonization via **`src/exclude_variables.R`**). Install CRAN packages with **`Rscript src/install_packages.R`**. Exploratory summaries and plots: **`Rscript scripts/02_eda.R`** (CSVs under **`data/processed/`**, figures under **`outputs/figures/`**, both gitignored). See **`data/README.md`**.
+**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. Place official **Stata** Full-Year PUFs **`h216.dta` … `h251.dta`** under **`data/raw/`**, then run **`Rscript scripts/01_clean-data.R`** to build **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (exclusions and harmonization via **`src/exclude_variables.R`**). Optionally run **`Rscript scripts/03_process-data.R`** to add **`TOTEXP_LOG1P`** and write **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** for modeling scripts that train on **`log(1 + TOTEXP)`** while keeping **`TOTEXP`** in dollars for RMSLE. Install CRAN packages with **`Rscript src/install_packages.R`**. Exploratory summaries and plots: **`Rscript scripts/02_eda.R`** reads the **non-processed** pooled file only (CSVs under **`data/processed/`**, figures under **`outputs/figures/`**, both gitignored). See **`data/README.md`**.
 
 **Test set note:** The instructor’s test set is a **random sample from MEPS in prior years**; **which years are not disclosed**. Plan for **cross-year generalization**: harmonize variable names (suffixes change with year), validate on held-out years when possible, and avoid overfitting a single year’s quirks.
 
@@ -63,7 +63,7 @@ Each year has a **codebook and documentation** on the same download page—read 
 
 ## Data pipeline: how selections and variables are built (this repo)
 
-This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**, **`scripts/02_eda.R`**, and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments). Exclusion helpers live in **`src/exclude_variables.R`**. The pooled modeling table matches **`selection_data.parquet`** inputs used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**, **`scripts/03_process-data.R`**, **`scripts/02_eda.R`**, and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments). Exclusion helpers live in **`src/exclude_variables.R`**. The pooled modeling table matches **`selection_data.parquet`** inputs used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
 
 ### 1. Install R packages
 
@@ -79,13 +79,22 @@ This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**
 4. **`meps_harmonize_names(df, yy)`** strips year suffixes; **`FYC_YEAR`** is added; **`dplyr::bind_rows`** pools all years.
 5. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`**.
 
-### 3. EDA (tabular + target distribution figure)
+### 3. Processed modeling table (`log(1+y)` column for training)
+
+**Command:** `Rscript scripts/03_process-data.R`
+
+1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
+2. Leaves **`TOTEXP`** unchanged (dollars).
+3. Adds **`TOTEXP_LOG1P`** = **`log1p(TOTEXP)`** for models that regress on **`log(1 + y)`** directly.
+4. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** — use this for **new** prediction pipelines; RMSLE evaluation still compares predictions to **`TOTEXP`** in dollars (back-transform model output as needed).
+
+### 4. EDA (tabular + target distribution figure)
 
 **Command:** `Rscript scripts/02_eda.R`
 
-Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**). Writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/figures/`** (gitignored with **`outputs/`**).
+Reads the **non-processed** pooled Parquet (**not** the `_processed` file). Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**). Writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/figures/`** (gitignored with **`outputs/`**).
 
-### 4. Selection sample, train/test holdout, and PCA columns
+### 5. Selection sample, train/test holdout, and PCA columns
 
 **Script:** `scripts/tuning/build_selection_data.R`. Environment variables: **`SEED`** (default **`42`**), **`N_PC`** (default **`220`**), and either **`N_TRAIN`** / **`N_TEST`** or legacy **`N_ROW`**.
 
@@ -103,7 +112,7 @@ Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data
 
 **Caveat:** The default holdout is **one random split**; metrics on the 2k test rows are **not** cross-validated. For model comparison, either repeat with different seeds or use nested CV if you need variance estimates.
 
-### 5. CV summaries and `CV_RMSE_RESULTS.md`
+### 6. CV summaries and `CV_RMSE_RESULTS.md`
 
 Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`** (training rows only when the holdout build was used), take **`PC*`** as predictors and **`TOTEXP`** as the response, and write JSON under **`data/processed/`**. **`run_xgb_tune_holdout.R`** fits and tunes **XGBoost** on **`selection_train.parquet`** and scores **`selection_test.parquet`** (no 10-fold loop). **`build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`**.
 
