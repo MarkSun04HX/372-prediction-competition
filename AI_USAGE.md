@@ -476,6 +476,26 @@
 
 ---
 
+## 2026-04-22 — SLURM array (6 models) + single-model mode in `04_model-comparison.R`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Add a SLURM script with partition/ondemand, 1 node, 1 task, CPUs, memory, time, mail, account, and run **6 jobs** (one model each) with **5-fold CV on 5 cores** per job.
+- **Output summary:** Added executable [`slurm/train_model_comparison.sh`](slurm/train_model_comparison.sh): `#SBATCH --array=1-6`, `--cpus-per-task=5`, `--mem=12GB`, `--time=00-02:00:00`, logs `slurm_cv_%A_%a.{out,err}`, exports **`MODEL_INDEX=${SLURM_ARRAY_TASK_ID}`**, runs **`install_packages`** then **`04_model-comparison.R`**. Updated [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R): **`MODEL_INDEX`** or **`SLURM_ARRAY_TASK_ID`** selects one of six models (ridge … lightgbm); skips other models and grids; writes **`cv_results_summary_<model>_<id>.csv`**, matching **`.rds`**, figures under **`outputs/figures/<id>_<model>/`**; fixed **`saveRDS`** (removed invalid **`res_lm`**). Makefile `train` already sources install first.
+- **What I used:** Existing SLURM CPU detection and `tune_grid` **`parallel_over = "resamples"`** in `04`.
+- **Verification:** Logic review only (full CV not re-run here).
+
+---
+
+## 2026-04-22 — `make train` submits Slurm; `make train-local` runs R locally
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Running **`make train`** should submit **`scripts/04_model-comparison.R`** jobs (Slurm).
+- **Output summary:** Updated [`Makefile`](Makefile): **`train`** runs **`sbatch slurm/train_model_comparison.sh`** (no redundant install in Make — batch script already sources **`install_packages`**). Added **`train-local`** for **`install_packages`** + **`04_model-comparison.R`** on laptops. README **§5 Model comparison** table documents both; old CV-summary subsection renumbered to **§7**.
+- **What I used:** Existing [`slurm/train_model_comparison.sh`](slurm/train_model_comparison.sh).
+- **Verification:** N/A ( **`sbatch`** only on cluster).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

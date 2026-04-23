@@ -14,7 +14,6 @@ pkgs <- c(
   "ranger",      # random forest (ranger engine for parsnip)
   "xgboost",     # gradient boosting (xgboost engine for parsnip)
   "lightgbm",    # gradient boosting (LightGBM)
-  "catboost",    # gradient boosting (CatBoost)
   "e1071",       # naive Bayes
   "rpart",       # regression trees
   "ggplot2",     # EDA plots

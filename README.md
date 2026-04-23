@@ -94,7 +94,16 @@ This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**
 
 Reads the **non-processed** pooled Parquet (**not** the `_processed` file). Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**). Writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/figures/`** (gitignored with **`outputs/`**).
 
-### 5. Selection sample, train/test holdout, and PCA columns
+### 5. Model comparison (`scripts/04_model-comparison.R`)
+
+Requires **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** (from §§2–3).
+
+| Where | Command |
+|------|---------|
+| **Slurm (HPC)** | From the repo root: **`make train`** — runs **`sbatch slurm/train_model_comparison.sh`** (job array **1–6**, one model per task; see script header). |
+| **Local machine** | **`make train-local`** — installs packages, then runs **`04_model-comparison.R`** once (all six models in sequence). |
+
+### 6. Selection sample, train/test holdout, and PCA columns
 
 **Script:** `scripts/tuning/build_selection_data.R`. Environment variables: **`SEED`** (default **`42`**), **`N_PC`** (default **`220`**), and either **`N_TRAIN`** / **`N_TEST`** or legacy **`N_ROW`**.
 
@@ -112,7 +121,7 @@ Reads the **non-processed** pooled Parquet (**not** the `_processed` file). Writ
 
 **Caveat:** The default holdout is **one random split**; metrics on the 2k test rows are **not** cross-validated. For model comparison, either repeat with different seeds or use nested CV if you need variance estimates.
 
-### 6. CV summaries and `CV_RMSE_RESULTS.md`
+### 7. CV summaries and `CV_RMSE_RESULTS.md`
 
 Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`** (training rows only when the holdout build was used), take **`PC*`** as predictors and **`TOTEXP`** as the response, and write JSON under **`data/processed/`**. **`run_xgb_tune_holdout.R`** fits and tunes **XGBoost** on **`selection_train.parquet`** and scores **`selection_test.parquet`** (no 10-fold loop). **`build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`**.
 

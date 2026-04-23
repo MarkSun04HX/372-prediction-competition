@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # 04_model-comparison.R
-# 5-fold CV comparison of 7 models evaluated by RMSLE.
-# Models: OLS, Ridge, Lasso, ElasticNet, Random Forest, XGBoost, LightGBM.
+# 5-fold CV comparison of six tuned models evaluated by RMSLE (ridge substitutes OLS).
+# Models: Ridge, Lasso, ElasticNet, Random Forest, XGBoost, LightGBM.
 #
 # Key insight: training on TOTEXP_LOG1P (= log1p(TOTEXP)) and measuring RMSE
 # on that scale equals RMSLE on the dollar scale (when predictions are >= 0).
@@ -11,8 +11,11 @@
 #
 # Environment variables:
 #   SEED     random seed            (default: 42)
-#   N_CORES  parallel workers       (default: all cores - 1)
+#   N_CORES  parallel workers       (default: SLURM_CPUS_PER_TASK or all cores - 1)
 #   N_FOLDS  CV folds               (default: 5)
+#   MODEL_INDEX             optional; integer 1..6 = run only one model:
+#                               1 ridge 2 lasso 3 elasticnet 4 rf 5 xgb 6 lgbm
+#                               If unset, SLURM_ARRAY_TASK_ID is used when present.
 
 suppressPackageStartupMessages({
   library(arrow)
@@ -46,8 +49,31 @@ if (is.na(.slurm_cores)) {
 .default_cores <- if (!is.na(.slurm_cores)) .slurm_cores else max(1L, parallel::detectCores() - 1L)
 N_CORES <- as.integer(Sys.getenv("N_CORES", unset = as.character(.default_cores)))
 
+MODEL_LABELS <- c(
+  "ridge", "lasso", "elasticnet",
+  "random_forest", "xgboost", "lightgbm"
+)
+
+.mid_raw <- Sys.getenv("MODEL_INDEX", "")
+if (!nzchar(.mid_raw))
+  .mid_raw <- Sys.getenv("SLURM_ARRAY_TASK_ID", "")
+single_model <- nzchar(.mid_raw)
+MID <- suppressWarnings(as.integer(.mid_raw))
+if (single_model && (is.na(MID) || MID < 1L || MID > length(MODEL_LABELS))) {
+  stop(
+    "MODEL_INDEX / SLURM_ARRAY_TASK_ID must be an integer from 1 to ",
+    length(MODEL_LABELS), ". Got: ", encodeString(.mid_raw), "\n",
+    "Mapping: 1 ridge, 2 lasso, 3 elasticnet, 4 random_forest, ",
+    "5 xgboost, 6 lightgbm."
+  )
+}
+
 set.seed(SEED)
-message("Config: seed=", SEED, "  cores=", N_CORES, "  folds=", N_FOLDS)
+message(
+  "Config: seed=", SEED, "  cores=", N_CORES, "  folds=", N_FOLDS,
+  if (single_model)
+    paste0("  single_model=", MODEL_LABELS[MID], " (", MID, ")") else ""
+)
 
 # ---- Load data ---------------------------------------------------------------
 
@@ -201,11 +227,16 @@ make_boost_grid <- function(wf, p_count, size = 150L) {
   dials::grid_latin_hypercube(param_set, size = size)
 }
 
-message("Building XGBoost grid ...")
-grid_xgb  <- make_boost_grid(wf_xgb,  p, size = 150L)
-
-message("Building LightGBM grid ...")
-grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L)
+grid_xgb <- NULL
+grid_lgbm <- NULL
+if (!single_model || MID == 5L) {
+  message("Building XGBoost grid ...")
+  grid_xgb <- make_boost_grid(wf_xgb, p, size = 150L)
+}
+if (!single_model || MID == 6L) {
+  message("Building LightGBM grid ...")
+  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L)
+}
 
 # ---- Parallel backend --------------------------------------------------------
 
@@ -235,29 +266,43 @@ if (.Platform$OS.type == "unix") {
   future::plan(future::multisession, workers = N_CORES)
 }
 
-message("\n[1/6] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
-res_ridge <- tune::tune_grid(wf_ridge, cv_folds,
-                              grid = grid_ridge, metrics = metric_fn, control = ctrl_grid)
+res_ridge <- res_lasso <- res_enet <- res_rf <- res_xgb <- res_lgbm <- NULL
 
-message("[2/6] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
-res_lasso <- tune::tune_grid(wf_lasso, cv_folds,
-                              grid = grid_lasso, metrics = metric_fn, control = ctrl_grid)
+if (!single_model || MID == 1L) {
+  message("\n[1/6] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
+  res_ridge <- tune::tune_grid(wf_ridge, cv_folds,
+                               grid = grid_ridge, metrics = metric_fn, control = ctrl_grid)
+}
 
-message("[3/6] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
-res_enet <- tune::tune_grid(wf_enet, cv_folds,
-                             grid = grid_enet, metrics = metric_fn, control = ctrl_grid)
+if (!single_model || MID == 2L) {
+  message("[2/6] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
+  res_lasso <- tune::tune_grid(wf_lasso, cv_folds,
+                               grid = grid_lasso, metrics = metric_fn, control = ctrl_grid)
+}
 
-message("[4/6] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
-res_rf <- tune::tune_grid(wf_rf, cv_folds,
-                           grid = grid_rf, metrics = metric_fn, control = ctrl_grid)
+if (!single_model || MID == 3L) {
+  message("[3/6] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
+  res_enet <- tune::tune_grid(wf_enet, cv_folds,
+                              grid = grid_enet, metrics = metric_fn, control = ctrl_grid)
+}
 
-message("[5/6] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
-res_xgb <- tune::tune_grid(wf_xgb, cv_folds,
-                            grid = grid_xgb, metrics = metric_fn, control = ctrl_grid)
+if (!single_model || MID == 4L) {
+  message("[4/6] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
+  res_rf <- tune::tune_grid(wf_rf, cv_folds,
+                            grid = grid_rf, metrics = metric_fn, control = ctrl_grid)
+}
 
-message("[6/6] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
-res_lgbm <- tune::tune_grid(wf_lgbm, cv_folds,
-                             grid = grid_lgbm, metrics = metric_fn, control = ctrl_grid)
+if (!single_model || MID == 5L) {
+  message("[5/6] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
+  res_xgb <- tune::tune_grid(wf_xgb, cv_folds,
+                             grid = grid_xgb, metrics = metric_fn, control = ctrl_grid)
+}
+
+if (!single_model || MID == 6L) {
+  message("[6/6] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
+  res_lgbm <- tune::tune_grid(wf_lgbm, cv_folds,
+                              grid = grid_lgbm, metrics = metric_fn, control = ctrl_grid)
+}
 
 future::plan(future::sequential)  # release workers
 
@@ -268,14 +313,17 @@ best_one <- function(res, label) {
     dplyr::mutate(model = label)
 }
 
-best_results <- dplyr::bind_rows(
-  best_one(res_ridge, "ridge"),
-  best_one(res_lasso, "lasso"),
-  best_one(res_enet,  "elasticnet"),
-  best_one(res_rf,    "random_forest"),
-  best_one(res_xgb,   "xgboost"),
-  best_one(res_lgbm,  "lightgbm")
-) %>%
+.best_chunks <- list()
+if (!is.null(res_ridge)) .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_ridge, "ridge")
+if (!is.null(res_lasso)) .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_lasso, "lasso")
+if (!is.null(res_enet))  .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_enet, "elasticnet")
+if (!is.null(res_rf))    .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_rf, "random_forest")
+if (!is.null(res_xgb))   .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_xgb, "xgboost")
+if (!is.null(res_lgbm))  .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_lgbm, "lightgbm")
+
+if (!length(.best_chunks)) stop("No model tuning results collected (check MODEL_INDEX).")
+
+best_results <- dplyr::bind_rows(.best_chunks) %>%
   dplyr::rename(rmsle_mean = mean, rmsle_sd = std_err) %>%
   dplyr::select(model, rmsle_mean, rmsle_sd, n, dplyr::everything()) %>%
   dplyr::arrange(rmsle_mean)
@@ -283,24 +331,7 @@ best_results <- dplyr::bind_rows(
 message("\n---- CV RMSLE Summary ----")
 print(dplyr::select(best_results, model, rmsle_mean, rmsle_sd))
 
-# Collect per-fold metrics for distribution plot (models without save_pred=FALSE)
-fold_metrics <- function(res, label) {
-  tune::collect_metrics(res, summarize = FALSE) %>%
-    dplyr::filter(.metric == "rmse") %>%
-    dplyr::mutate(model = label) %>%
-    dplyr::select(model, fold = id, rmsle = .estimate)
-}
-
-fold_results <- dplyr::bind_rows(
-  fold_metrics(res_ridge, "ridge"),
-  fold_metrics(res_lasso, "lasso"),
-  fold_metrics(res_enet,  "elasticnet"),
-  fold_metrics(res_rf,    "random_forest"),
-  fold_metrics(res_xgb,   "xgboost"),
-  fold_metrics(res_lgbm,  "lightgbm")
-)
-
-# For tuned models, collect fold metrics at the best hyperparameter setting
+# Per-fold metrics at best hyperparameter setting (for plots)
 fold_results_best <- function(res, label) {
   best_params <- tune::select_best(res, metric = "rmse")
   tune::collect_metrics(
@@ -312,15 +343,28 @@ fold_results_best <- function(res, label) {
     dplyr::select(model, fold = id, rmsle = .estimate)
 }
 
+.fold_best_chunks <- list()
+if (!is.null(res_ridge)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_ridge, "ridge")
+}
+if (!is.null(res_lasso)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_lasso, "lasso")
+}
+if (!is.null(res_enet)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_enet, "elasticnet")
+}
+if (!is.null(res_rf)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_rf, "random_forest")
+}
+if (!is.null(res_xgb)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_xgb, "xgboost")
+}
+if (!is.null(res_lgbm)) {
+  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_lgbm, "lightgbm")
+}
+
 fold_results <- tryCatch(
-  dplyr::bind_rows(
-    fold_results_best(res_ridge, "ridge"),
-    fold_results_best(res_lasso, "lasso"),
-    fold_results_best(res_enet,  "elasticnet"),
-    fold_results_best(res_rf,    "random_forest"),
-    fold_results_best(res_xgb,   "xgboost"),
-    fold_results_best(res_lgbm,  "lightgbm")
-  ),
+  dplyr::bind_rows(.fold_best_chunks),
   error = function(e) {
     message("Note: per-fold results at best params unavailable; skipping distribution plot.")
     NULL
@@ -332,29 +376,40 @@ fold_results <- tryCatch(
 out_dir <- file.path(root, "outputs")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-summary_path <- file.path(out_dir, "cv_results_summary.csv")
+.out_suffix <- if (single_model) {
+  paste0("_", MODEL_LABELS[MID], "_", MID)
+} else {
+  ""
+}
+
+summary_path <- file.path(out_dir, paste0("cv_results_summary", .out_suffix, ".csv"))
 write.csv(best_results, summary_path, row.names = FALSE)
 message("Saved: ", summary_path)
 
-rds_path <- file.path(out_dir, "cv_results_full.rds")
-saveRDS(list(
-  lm         = res_lm,
-  ridge      = res_ridge,
-  lasso      = res_lasso,
-  elasticnet = res_enet,
-  random_forest = res_rf,
-  xgboost    = res_xgb,
-  lightgbm   = res_lgbm
-), rds_path)
+rds_path <- file.path(out_dir, paste0("cv_results_full", .out_suffix, ".rds"))
+.rds_out <- list()
+if (!is.null(res_ridge)) .rds_out$ridge <- res_ridge
+if (!is.null(res_lasso)) .rds_out$lasso <- res_lasso
+if (!is.null(res_enet)) .rds_out$elasticnet <- res_enet
+if (!is.null(res_rf)) .rds_out$random_forest <- res_rf
+if (!is.null(res_xgb)) .rds_out$xgboost <- res_xgb
+if (!is.null(res_lgbm)) .rds_out$lightgbm <- res_lgbm
+saveRDS(.rds_out, rds_path)
 message("Saved: ", rds_path)
 
 # ---- Plots -------------------------------------------------------------------
 
 source(file.path(root, "src", "cv_plots.R"))
+fig_dir <- file.path(out_dir, "figures")
+if (single_model) {
+  fig_dir <- file.path(out_dir, "figures", paste0(MID, "_", MODEL_LABELS[MID]))
+}
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
 plot_cv_comparison(
   summary_tbl = best_results,
   fold_tbl    = fold_results,
-  outdir      = file.path(out_dir, "figures")
+  outdir      = fig_dir
 )
 
 message("\nDone.")
