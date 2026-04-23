@@ -112,8 +112,10 @@ message("Threads per model fit: ", THREADS_PER_MODEL,
         "  (", N_FOLDS, " folds x ", THREADS_PER_MODEL, " = ",
         N_FOLDS * THREADS_PER_MODEL, " / ", N_CORES, " cores)")
 
-spec_lm <- parsnip::linear_reg() %>%
-  parsnip::set_engine("lm")
+# OLS (lm engine) is infeasible at this scale: 1014 features x 80K training
+# rows requires ~3 GB just for the QR decomposition, exceeding HPC memory
+# limits even when run sequentially.  Ridge with a small penalty is a
+# strictly better regularized substitute and covers the same comparison slot.
 
 spec_ridge <- parsnip::linear_reg(penalty = tune::tune(), mixture = 0) %>%
   parsnip::set_engine("glmnet")
@@ -158,7 +160,6 @@ spec_lgbm <- parsnip::boost_tree(
 
 # ---- Workflows ---------------------------------------------------------------
 
-wf_lm    <- workflows::workflow() %>% workflows::add_recipe(rec_linear) %>% workflows::add_model(spec_lm)
 wf_ridge <- workflows::workflow() %>% workflows::add_recipe(rec_linear) %>% workflows::add_model(spec_ridge)
 wf_lasso <- workflows::workflow() %>% workflows::add_recipe(rec_linear) %>% workflows::add_model(spec_lasso)
 wf_enet  <- workflows::workflow() %>% workflows::add_recipe(rec_linear) %>% workflows::add_model(spec_enet)
@@ -218,9 +219,8 @@ message("Parallel backend: doFuture registered (",
 # parallel_over = "resamples": run one worker per CV fold (5 at a time).
 # "everything" (folds x grid) multiplies memory by the full grid size — causes
 # OOM kills on HPC when grid is large (150 candidates x data size x n_workers).
-ctrl_resample <- tune::control_resamples(save_pred = TRUE,  verbose = FALSE)
-ctrl_grid     <- tune::control_grid(     save_pred = FALSE, verbose = FALSE,
-                                          parallel_over = "resamples")
+ctrl_grid <- tune::control_grid(save_pred = FALSE, verbose = FALSE,
+                                 parallel_over = "resamples")
 
 # ---- Metric: RMSE on log1p scale = RMSLE on dollar scale --------------------
 
@@ -228,41 +228,34 @@ metric_fn <- yardstick::metric_set(yardstick::rmse)
 
 # ---- Fit / tune each model ---------------------------------------------------
 
-# OLS creates a dense design matrix (~800 MB per fold) — running 5 folds in
-# parallel exhausts memory. Fit it sequentially before starting workers.
-message("\n[1/7] Fitting OLS (sequential — avoids OOM from dense design matrix) ...")
-future::plan(future::sequential)
-res_lm <- tune::fit_resamples(wf_lm, cv_folds,
-                               metrics = metric_fn, control = ctrl_resample)
-
-# Now start the parallel plan for all tuned models.
+# Start parallel plan for all tuned models.
 if (.Platform$OS.type == "unix") {
   future::plan(future::multicore, workers = N_CORES)
 } else {
   future::plan(future::multisession, workers = N_CORES)
 }
 
-message("[2/7] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
+message("\n[1/6] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
 res_ridge <- tune::tune_grid(wf_ridge, cv_folds,
                               grid = grid_ridge, metrics = metric_fn, control = ctrl_grid)
 
-message("[3/7] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
+message("[2/6] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
 res_lasso <- tune::tune_grid(wf_lasso, cv_folds,
                               grid = grid_lasso, metrics = metric_fn, control = ctrl_grid)
 
-message("[4/7] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
+message("[3/6] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
 res_enet <- tune::tune_grid(wf_enet, cv_folds,
                              grid = grid_enet, metrics = metric_fn, control = ctrl_grid)
 
-message("[5/7] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
+message("[4/6] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
 res_rf <- tune::tune_grid(wf_rf, cv_folds,
                            grid = grid_rf, metrics = metric_fn, control = ctrl_grid)
 
-message("[6/7] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
+message("[5/6] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
 res_xgb <- tune::tune_grid(wf_xgb, cv_folds,
                             grid = grid_xgb, metrics = metric_fn, control = ctrl_grid)
 
-message("[7/7] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
+message("[6/6] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
 res_lgbm <- tune::tune_grid(wf_lgbm, cv_folds,
                              grid = grid_lgbm, metrics = metric_fn, control = ctrl_grid)
 
@@ -276,7 +269,6 @@ best_one <- function(res, label) {
 }
 
 best_results <- dplyr::bind_rows(
-  best_one(res_lm,    "lm"),
   best_one(res_ridge, "ridge"),
   best_one(res_lasso, "lasso"),
   best_one(res_enet,  "elasticnet"),
@@ -300,7 +292,6 @@ fold_metrics <- function(res, label) {
 }
 
 fold_results <- dplyr::bind_rows(
-  fold_metrics(res_lm,    "lm"),
   fold_metrics(res_ridge, "ridge"),
   fold_metrics(res_lasso, "lasso"),
   fold_metrics(res_enet,  "elasticnet"),
@@ -323,7 +314,6 @@ fold_results_best <- function(res, label) {
 
 fold_results <- tryCatch(
   dplyr::bind_rows(
-    fold_metrics(res_lm,     "lm"),
     fold_results_best(res_ridge, "ridge"),
     fold_results_best(res_lasso, "lasso"),
     fold_results_best(res_enet,  "elasticnet"),
