@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
-#SBATCH --mem=16GB
+#SBATCH --mem=48GB
 #SBATCH --time=00-02:00:00
 #SBATCH --array=1-6
 #SBATCH --mail-user=reny23@wfu.edu
