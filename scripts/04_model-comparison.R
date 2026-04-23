@@ -208,17 +208,12 @@ grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L)
 
 # ---- Parallel backend --------------------------------------------------------
 
+# Register doFuture as the foreach backend.
+# The actual plan (sequential vs multicore) is set per-model below,
+# because OLS requires sequential execution to avoid OOM.
 doFuture::registerDoFuture()
-# On Linux HPC, multicore (fork) is far more memory-efficient than multisession
-# because workers share the parent's memory pages via copy-on-write.
-# multisession copies the full dataset into every worker process.
-if (.Platform$OS.type == "unix") {
-  future::plan(future::multicore, workers = N_CORES)
-} else {
-  future::plan(future::multisession, workers = N_CORES)
-}
-message("Registered ", N_CORES, " parallel workers (",
-        if (.Platform$OS.type == "unix") "multicore/fork" else "multisession", ").")
+message("Parallel backend: doFuture registered (",
+        N_CORES, " cores available for tuned models).")
 
 # parallel_over = "resamples": run one worker per CV fold (5 at a time).
 # "everything" (folds x grid) multiplies memory by the full grid size — causes
@@ -233,9 +228,19 @@ metric_fn <- yardstick::metric_set(yardstick::rmse)
 
 # ---- Fit / tune each model ---------------------------------------------------
 
-message("\n[1/7] Fitting OLS ...")
+# OLS creates a dense design matrix (~800 MB per fold) — running 5 folds in
+# parallel exhausts memory. Fit it sequentially before starting workers.
+message("\n[1/7] Fitting OLS (sequential — avoids OOM from dense design matrix) ...")
+future::plan(future::sequential)
 res_lm <- tune::fit_resamples(wf_lm, cv_folds,
                                metrics = metric_fn, control = ctrl_resample)
+
+# Now start the parallel plan for all tuned models.
+if (.Platform$OS.type == "unix") {
+  future::plan(future::multicore, workers = N_CORES)
+} else {
+  future::plan(future::multisession, workers = N_CORES)
+}
 
 message("[2/7] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
 res_ridge <- tune::tune_grid(wf_ridge, cv_folds,
