@@ -1,6 +1,7 @@
 .cursor/
 data/processed
 outputs/
+slurm_logs/
 config/
 
 # Editor

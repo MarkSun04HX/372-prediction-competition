@@ -100,7 +100,7 @@ Requires **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parq
 
 | Where | Command |
 |------|---------|
-| **Slurm (HPC)** | From the repo root: **`make train`** — runs **`sbatch slurm/train_model_comparison.sh`** (job array **1–6**, one model per task; see script header). |
+| **Slurm (HPC)** | From the repo root: **`make train`** — creates **`slurm_logs/`**, runs **`sbatch slurm/train_model_comparison.sh`** (loads **`module apps/r/4.3.3`**; job array **1–6**, one model per task; **`slurm_logs/cv_*.{out,err}`** — gitignored). |
 | **Local machine** | **`make train-local`** — installs packages, then runs **`04_model-comparison.R`** once (all six models in sequence). |
 
 ### 6. Selection sample, train/test holdout, and PCA columns

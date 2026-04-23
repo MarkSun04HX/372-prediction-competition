@@ -496,6 +496,16 @@
 
 ---
 
+## 2026-04-22 — Slurm logs dir + `module load` R on HPC
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Put batch **`.out`/`.err`** in a dedicated gitignored folder (not **`outputs`**); run **`module load apps/r/4.3.3`** at the start of the batch job.
+- **Output summary:** Added **`slurm_logs/`** to [`.gitignore`](.gitignore); [`slurm/train_model_comparison.sh`](slurm/train_model_comparison.sh) uses **`#SBATCH --output/--error=slurm_logs/cv_%A_%a.{out,err}`** and **`module load apps/r/4.3.3`** immediately after **`set -euo pipefail`**. [`Makefile`](Makefile) **`train`** runs **`mkdir -p slurm_logs`** before **`sbatch`**. README Slurm row updated.
+- **What I used:** Existing Slurm script layout.
+- **Verification:** N/A (cluster-only).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

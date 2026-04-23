@@ -5,6 +5,7 @@ clean:
 
 # Submit six Slurm array tasks (one tuned model each); run from repo root on the cluster login/submit node.
 train:
+	mkdir -p slurm_logs
 	sbatch slurm/train_model_comparison.sh
 
 # Run all six models in one local R session (no Slurm).
