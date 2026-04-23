@@ -104,6 +104,14 @@ message("  Predictor count after recipe: ", p)
 
 # ---- Model specifications ----------------------------------------------------
 
+# With parallel_over = "resamples", N_FOLDS workers run simultaneously.
+# Give each worker (fold) its own thread budget so all N_CORES are used:
+#   N_FOLDS workers  x  THREADS_PER_MODEL threads  ≈  N_CORES total
+THREADS_PER_MODEL <- max(1L, N_CORES %/% N_FOLDS)
+message("Threads per model fit: ", THREADS_PER_MODEL,
+        "  (", N_FOLDS, " folds x ", THREADS_PER_MODEL, " = ",
+        N_FOLDS * THREADS_PER_MODEL, " / ", N_CORES, " cores)")
+
 spec_lm <- parsnip::linear_reg() %>%
   parsnip::set_engine("lm")
 
@@ -121,7 +129,7 @@ spec_rf <- parsnip::rand_forest(
     min_n = tune::tune(),
     trees = 500L
   ) %>%
-  parsnip::set_engine("ranger", num.threads = 1L, seed = SEED) %>%
+  parsnip::set_engine("ranger", num.threads = THREADS_PER_MODEL, seed = SEED) %>%
   parsnip::set_mode("regression")
 
 spec_xgb <- parsnip::boost_tree(
@@ -133,7 +141,7 @@ spec_xgb <- parsnip::boost_tree(
     sample_size   = tune::tune(),
     mtry          = tune::tune()
   ) %>%
-  parsnip::set_engine("xgboost", nthread = 1L) %>%
+  parsnip::set_engine("xgboost", nthread = THREADS_PER_MODEL) %>%
   parsnip::set_mode("regression")
 
 spec_lgbm <- parsnip::boost_tree(
@@ -145,7 +153,7 @@ spec_lgbm <- parsnip::boost_tree(
     sample_size   = tune::tune(),
     mtry          = tune::tune()
   ) %>%
-  parsnip::set_engine("lightgbm", num_threads = 1L) %>%
+  parsnip::set_engine("lightgbm", num_threads = THREADS_PER_MODEL) %>%
   parsnip::set_mode("regression")
 
 # ---- Workflows ---------------------------------------------------------------
@@ -201,12 +209,23 @@ grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L)
 # ---- Parallel backend --------------------------------------------------------
 
 doFuture::registerDoFuture()
-future::plan(future::multisession, workers = N_CORES)
-message("Registered ", N_CORES, " parallel workers.")
+# On Linux HPC, multicore (fork) is far more memory-efficient than multisession
+# because workers share the parent's memory pages via copy-on-write.
+# multisession copies the full dataset into every worker process.
+if (.Platform$OS.type == "unix") {
+  future::plan(future::multicore, workers = N_CORES)
+} else {
+  future::plan(future::multisession, workers = N_CORES)
+}
+message("Registered ", N_CORES, " parallel workers (",
+        if (.Platform$OS.type == "unix") "multicore/fork" else "multisession", ").")
 
+# parallel_over = "resamples": run one worker per CV fold (5 at a time).
+# "everything" (folds x grid) multiplies memory by the full grid size — causes
+# OOM kills on HPC when grid is large (150 candidates x data size x n_workers).
 ctrl_resample <- tune::control_resamples(save_pred = TRUE,  verbose = FALSE)
-ctrl_grid     <- tune::control_grid(    save_pred = FALSE, verbose = FALSE,
-                                         parallel_over = "everything")
+ctrl_grid     <- tune::control_grid(     save_pred = FALSE, verbose = FALSE,
+                                          parallel_over = "resamples")
 
 # ---- Metric: RMSE on log1p scale = RMSLE on dollar scale --------------------
 
