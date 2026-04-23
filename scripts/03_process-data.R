@@ -43,12 +43,12 @@ if ("TOTEXP_LOG1P" %in% names(df)) {
 
 df$TOTEXP_LOG1P <- log1p(tot)
 
-# ---- Drop character ID columns (person/family identifiers, not predictors) ----
+# ---- Drop all character columns (IDs and any other non-numeric strings) ----
 
-id_cols <- grep("^(DUPERSID|FAMID|FAMIDYR|CPSFAMID|RULETR)", names(df), value = TRUE)
-if (length(id_cols)) {
-  df <- df[, setdiff(names(df), id_cols), drop = FALSE]
-  message("Dropped ", length(id_cols), " ID character columns: ", paste(id_cols, collapse = ", "))
+char_cols <- names(df)[vapply(df, is.character, logical(1L))]
+if (length(char_cols)) {
+  df <- df[, setdiff(names(df), char_cols), drop = FALSE]
+  message("Dropped ", length(char_cols), " character columns: ", paste(char_cols, collapse = ", "))
 }
 
 # ---- Drop zero-variance numeric columns (constant across full pooled dataset) ----
