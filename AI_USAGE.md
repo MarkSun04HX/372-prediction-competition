@@ -556,6 +556,31 @@
 
 ---
 
+## 2026-05-03 — Model expansion, shrinkage, HPC SLURM redesign
+
+- **Tool:** Cursor Agent
+- **Prompt:** Add two-part (hurdle) models for zero-inflated TOTEXP; investigate shrinkage for tree models; redesign SLURM to run one job per model sequentially to fix OOM; rename make targets; add combine and best-model-training scripts.
+- **Output summary:**
+  - Expanded `scripts/04_model-comparison.R` to support MODEL_INDEX 1–9 (added `two_part_rf_rf`, `two_part_rf_xgb`, `two_part_rf_en`). Two-part models use a manual 5-fold CV loop: RF classifier (stage 1, fixed params) + regressor on non-zero rows (stage 2, reuses best hyperparams from corresponding single-stage CV RDS). Added `lambda = tune()` (L2 penalty) to the XGBoost engine spec. Switched to `future::plan(sequential)` when `N_CORES=1`. All outputs go to `outputs/cv/{model_name}/`.
+  - Created `scripts/05_combine_cv.R`: reads all per-model `cv_summary.csv` files, produces `outputs/cv/cv_summary_all.csv` and combined bar/distribution plots.
+  - Created `scripts/06_train_best.R`: reads leaderboard, fits best model on full dataset, saves to `models/{best_model}/`.
+  - Created `slurm/train_one_model.sh` (1 CPU, configurable mem), `slurm/combine_cv.sh`, `slurm/train_best.sh`, and `slurm/submit_all_cv.sh` (orchestrator with SLURM `--dependency=afterok` chain: two-part jobs wait for parent single-stage jobs; combine waits for all 9).
+  - Updated `Makefile`: `make cv` → submits all jobs; `make cv-local` → runs locally; `make train` → fits best model on HPC; `make train-local` → fits locally.
+- **What I used:** Model architecture (hurdle/two-part), SLURM dependency design, XGBoost L2 regularization parameter, sequential execution for HPC OOM fix.
+- **Verification:** N/A — will verify on next HPC run.
+
+---
+
+## 2026-05-03 — SLURM wall time 24 hours for all batch jobs
+
+- **Tool:** Cursor Agent
+- **Prompt:** Give all jobs 24 hours.
+- **Output summary:** Set `#SBATCH --time=24:00:00` in [`slurm/train_one_model.sh`](slurm/train_one_model.sh), [`slurm/combine_cv.sh`](slurm/combine_cv.sh), and [`slurm/train_best.sh`](slurm/train_best.sh) (replacing 6 h, 30 min, and 4 h respectively).
+- **What I used:** N/A.
+- **Verification:** N/A.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

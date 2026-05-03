@@ -1,28 +1,39 @@
 #!/usr/bin/env Rscript
 # 04_model-comparison.R
-# 5-fold CV comparison of six tuned models evaluated by RMSLE (ridge substitutes OLS).
-# Models: Ridge, Lasso, ElasticNet, Random Forest, XGBoost, LightGBM.
+# 5-fold CV comparison of nine models evaluated by RMSLE.
 #
-# Key insight: training on TOTEXP_LOG1P (= log1p(TOTEXP)) and measuring RMSE
-# on that scale equals RMSLE on the dollar scale (when predictions are >= 0).
+# Single-stage models (tidymodels + tune_grid):
+#   1 ridge  2 lasso  3 elasticnet  4 random_forest  5 xgboost  6 lightgbm
 #
-# Usage (from repo root):
-#   Rscript scripts/04_model-comparison.R
+# Two-part / hurdle models (manual CV loop, sequential):
+#   7 two_part_rf_rf   Stage 1: RF classifier; Stage 2: RF regressor
+#   8 two_part_rf_xgb  Stage 1: RF classifier; Stage 2: XGBoost regressor
+#   9 two_part_rf_en   Stage 1: RF classifier; Stage 2: ElasticNet regressor
+#
+#   Stage 1 uses fixed hyperparameters (classification gating is robust).
+#   Stage 2 reuses the best hyperparameters found by the corresponding
+#   single-stage CV run (model 4 for RF, 5 for XGB, 3 for EN).
+#   → Two-part jobs must be submitted after their parent single-stage job.
+#
+# Key insight: RMSE on TOTEXP_LOG1P = log1p(TOTEXP) equals RMSLE on dollar scale.
 #
 # Environment variables:
-#   SEED     random seed            (default: 42)
-#   N_CORES  parallel workers       (default: SLURM_CPUS_PER_TASK or all cores - 1)
-#   N_FOLDS  CV folds               (default: 5)
-#   MODEL_INDEX             optional; integer 1..6 = run only one model:
-#                               1 ridge 2 lasso 3 elasticnet 4 rf 5 xgb 6 lgbm
-#                               If unset, SLURM_ARRAY_TASK_ID is used when present.
+#   SEED         random seed                (default: 42)
+#   N_FOLDS      CV folds                   (default: 5)
+#   N_CORES      parallel workers           (default: SLURM_CPUS_PER_TASK or all-1)
+#                Set N_CORES=1 to run folds sequentially — strongly recommended on HPC.
+#                Sequential avoids fork-based memory duplication (~7 GB saved per RF job).
+#   MODEL_INDEX  integer 1-9, run one model (unset = run all)
 
 suppressPackageStartupMessages({
   library(arrow)
   library(dplyr)
   library(tidymodels)
-  library(bonsai)      # LightGBM engine for parsnip
-  library(doFuture)    # foreach backend for tune_grid parallelism
+  library(bonsai)
+  library(doFuture)
+  library(ranger)
+  library(xgboost)
+  library(glmnet)
 })
 
 # ---- Resolve repo root -------------------------------------------------------
@@ -40,39 +51,36 @@ root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TR
 SEED    <- as.integer(Sys.getenv("SEED",    unset = "42"))
 N_FOLDS <- as.integer(Sys.getenv("N_FOLDS", unset = "5"))
 
-# Detect allocated cores: respect SLURM allocation before falling back to
-# detectCores() (which returns the full node count, not the job allocation).
 .slurm_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = NA)))
-if (is.na(.slurm_cores)) {
+if (is.na(.slurm_cores))
   .slurm_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_ON_NODE", unset = NA)))
-}
 .default_cores <- if (!is.na(.slurm_cores)) .slurm_cores else max(1L, parallel::detectCores() - 1L)
 N_CORES <- as.integer(Sys.getenv("N_CORES", unset = as.character(.default_cores)))
 
 MODEL_LABELS <- c(
   "ridge", "lasso", "elasticnet",
-  "random_forest", "xgboost", "lightgbm"
+  "random_forest", "xgboost", "lightgbm",
+  "two_part_rf_rf", "two_part_rf_xgb", "two_part_rf_en"
 )
+N_MODELS <- length(MODEL_LABELS)
 
 .mid_raw <- Sys.getenv("MODEL_INDEX", "")
 if (!nzchar(.mid_raw))
   .mid_raw <- Sys.getenv("SLURM_ARRAY_TASK_ID", "")
 single_model <- nzchar(.mid_raw)
 MID <- suppressWarnings(as.integer(.mid_raw))
-if (single_model && (is.na(MID) || MID < 1L || MID > length(MODEL_LABELS))) {
+if (single_model && (is.na(MID) || MID < 1L || MID > N_MODELS)) {
   stop(
-    "MODEL_INDEX / SLURM_ARRAY_TASK_ID must be an integer from 1 to ",
-    length(MODEL_LABELS), ". Got: ", encodeString(.mid_raw), "\n",
+    "MODEL_INDEX must be an integer 1-", N_MODELS, ". Got: ", encodeString(.mid_raw), "\n",
     "Mapping: 1 ridge, 2 lasso, 3 elasticnet, 4 random_forest, ",
-    "5 xgboost, 6 lightgbm."
+    "5 xgboost, 6 lightgbm, 7 two_part_rf_rf, 8 two_part_rf_xgb, 9 two_part_rf_en."
   )
 }
 
 set.seed(SEED)
 message(
   "Config: seed=", SEED, "  cores=", N_CORES, "  folds=", N_FOLDS,
-  if (single_model)
-    paste0("  single_model=", MODEL_LABELS[MID], " (", MID, ")") else ""
+  if (single_model) paste0("  model=", MODEL_LABELS[MID], " (", MID, ")") else "  model=ALL"
 )
 
 # ---- Load data ---------------------------------------------------------------
@@ -80,102 +88,94 @@ message(
 in_path <- file.path(root, "data", "processed",
                      "meps_fyc_2019_2023_pooled_for_modeling_processed.parquet")
 if (!file.exists(in_path))
-  stop("Missing processed file — run `make clean` first:\n  ", in_path)
+  stop("Missing processed file — run `make data` first:\n  ", in_path)
 
 message("Reading ", in_path, " ...")
 df <- read_parquet(in_path, as_data_frame = TRUE)
 message("  ", nrow(df), " rows x ", ncol(df), " cols")
-
-message("Working dataset: ", nrow(df), " rows x ", ncol(df), " cols")
-# NA handling and categorical encoding are fully resolved in 03_process-data.R.
-# No pre-filter or imputation needed here.
 
 # ---- CV folds ----------------------------------------------------------------
 
 message("Creating ", N_FOLDS, "-fold CV stratified on TOTEXP_LOG1P ...")
 cv_folds <- rsample::vfold_cv(df, v = N_FOLDS, strata = "TOTEXP_LOG1P")
 
-# ---- Recipes -----------------------------------------------------------------
+# ---- Recipes (single-stage models only) --------------------------------------
 
-# 03_process-data.R has already:
-#   - One-hot encoded nominal variables (NA as its own level)
-#   - Recoded NA in ordinal/binary categoricals to a distinct integer level
-#   - Dropped all continuous columns that had any NA
-# So no imputation or pre-filter is needed here.
-
-# Base recipe: used by tree-based models (no normalisation needed).
-#   - Removes TOTEXP (raw dollars) so it cannot leak into predictors.
-#   - Removes any remaining zero-variance columns (safety net only).
 rec_base <- recipes::recipe(TOTEXP_LOG1P ~ ., data = df) %>%
   recipes::step_rm(TOTEXP) %>%
   recipes::step_zv(recipes::all_predictors())
 
-# Linear recipe: additionally normalises predictors for glmnet.
 rec_linear <- rec_base %>%
   recipes::step_normalize(recipes::all_numeric_predictors())
 
-# ---- Determine predictor count after recipe (for mtry range) ----------------
+# ---- Predictor count after recipe (shared by all models) --------------------
 
 message("Prepping recipe to determine post-recipe predictor count ...")
 baked_sample <- recipes::bake(
   recipes::prep(rec_base, training = head(df, 2000)),
   new_data = NULL
 )
-p <- ncol(baked_sample) - 1L   # subtract the outcome column
-message("  Predictor count after recipe: ", p)
+p <- ncol(baked_sample) - 1L
+message("  Predictors after recipe: ", p)
+
+# ---- Threading for single-stage models ---------------------------------------
+# When N_CORES=1 (sequential): each model uses 1 thread — no oversubscription.
+# When N_CORES>1: divide threads evenly across parallel fold workers.
+
+THREADS_PER_MODEL <- if (N_CORES <= 1L) 1L else max(1L, N_CORES %/% N_FOLDS)
+message(
+  "Sequential folds: ", N_CORES <= 1L, "  |  Threads per model fit: ", THREADS_PER_MODEL
+)
+
+# ---- XGB L2 regularization dials parameter -----------------------------------
+# XGBoost's lambda (L2 penalty on leaf weights, default=1) can be tuned.
+# We use dials::penalty (log10 scale) as a proxy for the [-3,1] log10 range
+# (0.001 to 10), which covers from light to strong regularization.
+
+.xgb_lambda_param <- dials::penalty(range = c(-3, 1))
 
 # ---- Model specifications ----------------------------------------------------
 
-# With parallel_over = "resamples", N_FOLDS workers run simultaneously.
-# Give each worker (fold) its own thread budget so all N_CORES are used:
-#   N_FOLDS workers  x  THREADS_PER_MODEL threads  ≈  N_CORES total
-THREADS_PER_MODEL <- max(1L, N_CORES %/% N_FOLDS)
-message("Threads per model fit: ", THREADS_PER_MODEL,
-        "  (", N_FOLDS, " folds x ", THREADS_PER_MODEL, " = ",
-        N_FOLDS * THREADS_PER_MODEL, " / ", N_CORES, " cores)")
-
-# OLS (lm engine) is infeasible at this scale: 1014 features x 80K training
-# rows requires ~3 GB just for the QR decomposition, exceeding HPC memory
-# limits even when run sequentially.  Ridge with a small penalty is a
-# strictly better regularized substitute and covers the same comparison slot.
-
-spec_ridge <- parsnip::linear_reg(penalty = tune::tune(), mixture = 0) %>%
+spec_ridge <- parsnip::linear_reg(penalty = tune(), mixture = 0) %>%
   parsnip::set_engine("glmnet")
 
-spec_lasso <- parsnip::linear_reg(penalty = tune::tune(), mixture = 1) %>%
+spec_lasso <- parsnip::linear_reg(penalty = tune(), mixture = 1) %>%
   parsnip::set_engine("glmnet")
 
-spec_enet <- parsnip::linear_reg(penalty = tune::tune(), mixture = tune::tune()) %>%
+spec_enet <- parsnip::linear_reg(penalty = tune(), mixture = tune()) %>%
   parsnip::set_engine("glmnet")
 
 spec_rf <- parsnip::rand_forest(
-    mtry  = tune::tune(),
-    min_n = tune::tune(),
+    mtry  = tune(),
+    min_n = tune(),
     trees = 500L
   ) %>%
   parsnip::set_engine("ranger", num.threads = THREADS_PER_MODEL, seed = SEED) %>%
   parsnip::set_mode("regression")
 
 spec_xgb <- parsnip::boost_tree(
-    trees         = tune::tune(),
-    learn_rate    = tune::tune(),
-    tree_depth    = tune::tune(),
-    min_n         = tune::tune(),
-    loss_reduction = tune::tune(),
-    sample_size   = tune::tune(),
-    mtry          = tune::tune()
+    trees          = tune(),
+    learn_rate     = tune(),
+    tree_depth     = tune(),
+    min_n          = tune(),
+    loss_reduction = tune(),
+    sample_size    = tune(),
+    mtry           = tune()
   ) %>%
-  parsnip::set_engine("xgboost", nthread = THREADS_PER_MODEL) %>%
+  parsnip::set_engine("xgboost",
+    nthread = THREADS_PER_MODEL,
+    lambda  = tune()           # L2 regularization; tuned via grid_latin_hypercube
+  ) %>%
   parsnip::set_mode("regression")
 
 spec_lgbm <- parsnip::boost_tree(
-    trees         = tune::tune(),
-    learn_rate    = tune::tune(),
-    tree_depth    = tune::tune(),
-    min_n         = tune::tune(),
-    loss_reduction = tune::tune(),
-    sample_size   = tune::tune(),
-    mtry          = tune::tune()
+    trees          = tune(),
+    learn_rate     = tune(),
+    tree_depth     = tune(),
+    min_n          = tune(),
+    loss_reduction = tune(),
+    sample_size    = tune(),
+    mtry           = tune()
   ) %>%
   parsnip::set_engine("lightgbm", num_threads = THREADS_PER_MODEL) %>%
   parsnip::set_mode("regression")
@@ -191,221 +191,425 @@ wf_lgbm  <- workflows::workflow() %>% workflows::add_recipe(rec_base)   %>% work
 
 # ---- Hyperparameter grids ----------------------------------------------------
 
-# Ridge: 30 log-spaced penalty values
 grid_ridge <- tibble::tibble(penalty = 10^seq(-4, 4, length.out = 30))
 grid_lasso <- grid_ridge
 
-# ElasticNet: 20 penalties x 5 mixture values = 100 combinations
 grid_enet <- tidyr::expand_grid(
   penalty = 10^seq(-4, 2, length.out = 20),
   mixture = c(0.1, 0.25, 0.5, 0.75, 0.9)
 )
 
-# Random Forest: 5 mtry levels x 4 min_n levels = 20 combinations
-mtry_vals <- unique(round(p * c(0.01, 0.03, 0.07, 0.15, 0.30)))
-mtry_vals <- pmax(1L, mtry_vals)
-grid_rf <- tidyr::expand_grid(
-  mtry  = mtry_vals,
-  min_n = c(2L, 5L, 10L, 20L)
-)
+mtry_vals <- unique(pmax(1L, round(p * c(0.01, 0.03, 0.07, 0.15, 0.30))))
+grid_rf <- tidyr::expand_grid(mtry = mtry_vals, min_n = c(2L, 5L, 10L, 20L))
 
-# XGBoost and LightGBM: Latin hypercube, 150 candidates each.
-# Finalize mtry range against actual predictor count.
-make_boost_grid <- function(wf, p_count, size = 150L) {
+# For XGBoost: Latin hypercube including lambda.
+# For LightGBM: Latin hypercube without lambda (not in spec).
+make_boost_grid <- function(wf, p_count, size = 150L, include_lambda = FALSE) {
   param_set <- hardhat::extract_parameter_set_dials(wf)
-  # Override mtry range with data-derived bounds.
-  # update() dispatches to dials' S3 method — must NOT be namespace-qualified.
-  param_set <- update(
-    param_set,
+  updates <- list(
     mtry = dials::mtry(range = c(max(1L, round(p_count * 0.05)),
                                   round(p_count * 0.80)))
   )
+  if (include_lambda) updates$lambda <- .xgb_lambda_param
+  param_set <- do.call(update, c(list(param_set), updates))
   dials::grid_latin_hypercube(param_set, size = size)
 }
 
-grid_xgb <- NULL
+grid_xgb  <- NULL
 grid_lgbm <- NULL
 if (!single_model || MID == 5L) {
-  message("Building XGBoost grid ...")
-  grid_xgb <- make_boost_grid(wf_xgb, p, size = 150L)
+  message("Building XGBoost grid (with lambda) ...")
+  grid_xgb <- make_boost_grid(wf_xgb, p, size = 150L, include_lambda = TRUE)
 }
 if (!single_model || MID == 6L) {
   message("Building LightGBM grid ...")
-  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L)
+  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L, include_lambda = FALSE)
 }
 
 # ---- Parallel backend --------------------------------------------------------
 
-# Register doFuture as the foreach backend.
-# The actual plan (sequential vs multicore) is set per-model below,
-# because OLS requires sequential execution to avoid OOM.
+# N_CORES=1: run folds sequentially — no forking, one data copy in memory.
+# N_CORES>1: parallel_over="resamples" runs one worker per fold.
+
 doFuture::registerDoFuture()
-message("Parallel backend: doFuture registered (",
-        N_CORES, " cores available for tuned models).")
 
-# parallel_over = "resamples": run one worker per CV fold (5 at a time).
-# "everything" (folds x grid) multiplies memory by the full grid size — causes
-# OOM kills on HPC when grid is large (150 candidates x data size x n_workers).
-ctrl_grid <- tune::control_grid(save_pred = FALSE, verbose = FALSE,
-                                 parallel_over = "resamples")
+if (N_CORES > 1L) {
+  message("Parallel backend: ", N_CORES, " cores (multicore/multisession).")
+  if (.Platform$OS.type == "unix") {
+    future::plan(future::multicore, workers = N_CORES)
+  } else {
+    future::plan(future::multisession, workers = N_CORES)
+  }
+} else {
+  message("Parallel backend: sequential (N_CORES=1 — recommended on HPC).")
+  future::plan(future::sequential)
+}
 
-# ---- Metric: RMSE on log1p scale = RMSLE on dollar scale --------------------
-
+ctrl_grid <- tune::control_grid(
+  save_pred    = FALSE,
+  verbose      = FALSE,
+  parallel_over = "resamples"
+)
 metric_fn <- yardstick::metric_set(yardstick::rmse)
 
-# ---- Fit / tune each model ---------------------------------------------------
-
-# Start parallel plan for all tuned models.
-if (.Platform$OS.type == "unix") {
-  future::plan(future::multicore, workers = N_CORES)
-} else {
-  future::plan(future::multisession, workers = N_CORES)
-}
+# ---- Fit single-stage models (1-6) -------------------------------------------
 
 res_ridge <- res_lasso <- res_enet <- res_rf <- res_xgb <- res_lgbm <- NULL
 
 if (!single_model || MID == 1L) {
-  message("\n[1/6] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
+  message("\n[1/9] Tuning Ridge (grid size ", nrow(grid_ridge), ") ...")
   res_ridge <- tune::tune_grid(wf_ridge, cv_folds,
                                grid = grid_ridge, metrics = metric_fn, control = ctrl_grid)
 }
-
 if (!single_model || MID == 2L) {
-  message("[2/6] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
+  message("\n[2/9] Tuning Lasso (grid size ", nrow(grid_lasso), ") ...")
   res_lasso <- tune::tune_grid(wf_lasso, cv_folds,
                                grid = grid_lasso, metrics = metric_fn, control = ctrl_grid)
 }
-
 if (!single_model || MID == 3L) {
-  message("[3/6] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
+  message("\n[3/9] Tuning ElasticNet (grid size ", nrow(grid_enet), ") ...")
   res_enet <- tune::tune_grid(wf_enet, cv_folds,
                               grid = grid_enet, metrics = metric_fn, control = ctrl_grid)
 }
-
 if (!single_model || MID == 4L) {
-  message("[4/6] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
+  message("\n[4/9] Tuning Random Forest (grid size ", nrow(grid_rf), ") ...")
   res_rf <- tune::tune_grid(wf_rf, cv_folds,
                             grid = grid_rf, metrics = metric_fn, control = ctrl_grid)
 }
-
 if (!single_model || MID == 5L) {
-  message("[5/6] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
+  message("\n[5/9] Tuning XGBoost (grid size ", nrow(grid_xgb), ") ...")
   res_xgb <- tune::tune_grid(wf_xgb, cv_folds,
                              grid = grid_xgb, metrics = metric_fn, control = ctrl_grid)
 }
-
 if (!single_model || MID == 6L) {
-  message("[6/6] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
+  message("\n[6/9] Tuning LightGBM (grid size ", nrow(grid_lgbm), ") ...")
   res_lgbm <- tune::tune_grid(wf_lgbm, cv_folds,
                               grid = grid_lgbm, metrics = metric_fn, control = ctrl_grid)
 }
 
-future::plan(future::sequential)  # release workers
+future::plan(future::sequential)  # release parallel workers
 
-# ---- Collect best results ----------------------------------------------------
+# ---- Two-part (hurdle) models (7-9) ------------------------------------------
+# Manual sequential CV loop. Stage 1: RF classifier (fixed params).
+# Stage 2: regressor on non-zero training rows using best single-stage hyperparams.
 
-best_one <- function(res, label) {
-  tune::show_best(res, metric = "rmse", n = 1) %>%
-    dplyr::mutate(model = label)
+.run_two_part_cv <- function(df, cv_folds, s1_params, s2_type, s2_params, p_count, seed) {
+  pred_cols  <- setdiff(names(df), c("TOTEXP", "TOTEXP_LOG1P"))
+  n_folds    <- nrow(cv_folds)
+  fold_rmsle <- numeric(n_folds)
+
+  for (i in seq_len(n_folds)) {
+    message("  Fold ", i, "/", n_folds, " ...")
+    train <- rsample::analysis(cv_folds$splits[[i]])
+    test  <- rsample::assessment(cv_folds$splits[[i]])
+
+    X_train <- as.matrix(train[, pred_cols])
+    X_test  <- as.matrix(test[, pred_cols])
+
+    # Stage 1: binary classification (zero vs nonzero spender)
+    y1 <- factor(train$TOTEXP > 0, levels = c(FALSE, TRUE))
+    s1 <- ranger::ranger(
+      x = X_train, y = y1,
+      num.trees     = s1_params$trees,
+      mtry          = s1_params$mtry,
+      min.node.size = s1_params$min_node_size,
+      probability   = TRUE,
+      num.threads   = 1L,
+      seed          = seed
+    )
+    p_nonzero <- predict(s1, data = X_test)$predictions[, "TRUE"]
+
+    # Stage 2: regressor on non-zero training rows
+    nz    <- train$TOTEXP > 0
+    X_nz  <- X_train[nz, , drop = FALSE]
+    y_nz  <- train$TOTEXP_LOG1P[nz]
+
+    s2_pred <- if (s2_type == "rf") {
+      fit <- ranger::ranger(
+        x = X_nz, y = y_nz,
+        num.trees     = s2_params$trees,
+        mtry          = s2_params$mtry,
+        min.node.size = s2_params$min_n,
+        num.threads   = 1L,
+        seed          = seed
+      )
+      predict(fit, data = X_test)$predictions
+
+    } else if (s2_type == "xgb") {
+      dtrain <- xgboost::xgb.DMatrix(X_nz, label = y_nz)
+      dtest  <- xgboost::xgb.DMatrix(X_test)
+      fit <- xgboost::xgb.train(
+        params = list(
+          objective        = "reg:squarederror",
+          nthread          = 1L,
+          max_depth        = s2_params$max_depth,
+          eta              = s2_params$eta,
+          min_child_weight = s2_params$min_child_weight,
+          gamma            = s2_params$gamma,
+          subsample        = s2_params$subsample,
+          colsample_bytree = s2_params$colsample_bytree,
+          lambda           = s2_params$lambda
+        ),
+        data    = dtrain,
+        nrounds = s2_params$nrounds,
+        verbose = 0
+      )
+      predict(fit, dtest)
+
+    } else {
+      fit <- glmnet::glmnet(
+        x      = X_nz,
+        y      = y_nz,
+        alpha  = s2_params$mixture,
+        lambda = s2_params$penalty
+      )
+      as.vector(predict(fit, newx = X_test, s = s2_params$penalty))
+    }
+
+    # Combine: stage-2 prediction where classified nonzero, else 0
+    final_pred    <- ifelse(p_nonzero > 0.5, pmax(0, s2_pred), 0)
+    fold_rmsle[i] <- sqrt(mean((final_pred - test$TOTEXP_LOG1P)^2))
+    message("    RMSLE = ", round(fold_rmsle[i], 5))
+    gc()
+  }
+
+  list(
+    rmsle_mean = mean(fold_rmsle),
+    rmsle_sd   = sd(fold_rmsle) / sqrt(n_folds),
+    fold_rmsle = fold_rmsle
+  )
 }
+
+# Map tidymodels boost_tree param names → xgboost native API
+.xgb_tidy_to_native <- function(best, p_count) {
+  list(
+    nrounds          = max(1L,  as.integer(best$trees)),
+    max_depth        = max(1L,  as.integer(best$tree_depth)),
+    eta              = best$learn_rate,
+    min_child_weight = max(1,   as.numeric(best$min_n)),
+    gamma            = max(0,   best$loss_reduction),
+    subsample        = min(1,   max(0.1, best$sample_size)),
+    colsample_bytree = min(1,   max(0.1, best$mtry / p_count)),
+    lambda           = if ("lambda" %in% names(best)) max(0, best$lambda) else 1.0
+  )
+}
+
+# Stage-1 RF classifier: fixed hyperparameters
+.s1_params <- list(
+  trees        = 300L,
+  mtry         = max(1L, floor(sqrt(p))),
+  min_node_size = 5L
+)
+
+res_tp_rf_rf <- res_tp_rf_xgb <- res_tp_rf_en <- NULL
+
+if (!single_model || MID == 7L) {
+  message("\n[7/9] Two-part RF+RF ...")
+  # Best RF hyperparams: prefer in-memory result, fall back to saved RDS
+  rf_best <- if (!is.null(res_rf)) {
+    tune::select_best(res_rf, metric = "rmse")
+  } else {
+    rp <- file.path(root, "outputs", "cv", "random_forest", "cv_full.rds")
+    if (!file.exists(rp))
+      stop("two_part_rf_rf needs random_forest CV results.\n  Missing: ", rp,
+           "\n  Run MODEL_INDEX=4 first.")
+    tune::select_best(readRDS(rp)$random_forest, metric = "rmse")
+  }
+  s2_rf_params <- list(
+    trees = 500L,
+    mtry  = max(1L, as.integer(rf_best$mtry)),
+    min_n = max(1L, as.integer(rf_best$min_n))
+  )
+  message("  Stage-2 RF: mtry=", s2_rf_params$mtry, " min_n=", s2_rf_params$min_n)
+  res_tp_rf_rf <- .run_two_part_cv(df, cv_folds, .s1_params, "rf", s2_rf_params, p, SEED)
+  message("  Mean RMSLE: ", round(res_tp_rf_rf$rmsle_mean, 5))
+}
+
+if (!single_model || MID == 8L) {
+  message("\n[8/9] Two-part RF+XGBoost ...")
+  xgb_best <- if (!is.null(res_xgb)) {
+    tune::select_best(res_xgb, metric = "rmse")
+  } else {
+    rp <- file.path(root, "outputs", "cv", "xgboost", "cv_full.rds")
+    if (!file.exists(rp))
+      stop("two_part_rf_xgb needs xgboost CV results.\n  Missing: ", rp,
+           "\n  Run MODEL_INDEX=5 first.")
+    tune::select_best(readRDS(rp)$xgboost, metric = "rmse")
+  }
+  s2_xgb_params <- .xgb_tidy_to_native(xgb_best, p)
+  message("  Stage-2 XGB: nrounds=", s2_xgb_params$nrounds,
+          " depth=", s2_xgb_params$max_depth, " lambda=", round(s2_xgb_params$lambda, 3))
+  res_tp_rf_xgb <- .run_two_part_cv(df, cv_folds, .s1_params, "xgb", s2_xgb_params, p, SEED)
+  message("  Mean RMSLE: ", round(res_tp_rf_xgb$rmsle_mean, 5))
+}
+
+if (!single_model || MID == 9L) {
+  message("\n[9/9] Two-part RF+ElasticNet ...")
+  en_best <- if (!is.null(res_enet)) {
+    tune::select_best(res_enet, metric = "rmse")
+  } else {
+    rp <- file.path(root, "outputs", "cv", "elasticnet", "cv_full.rds")
+    if (!file.exists(rp))
+      stop("two_part_rf_en needs elasticnet CV results.\n  Missing: ", rp,
+           "\n  Run MODEL_INDEX=3 first.")
+    tune::select_best(readRDS(rp)$elasticnet, metric = "rmse")
+  }
+  s2_en_params <- list(mixture = en_best$mixture, penalty = en_best$penalty)
+  message("  Stage-2 EN: alpha=", round(s2_en_params$mixture, 3),
+          " lambda=", round(s2_en_params$penalty, 5))
+  res_tp_rf_en <- .run_two_part_cv(df, cv_folds, .s1_params, "en", s2_en_params, p, SEED)
+  message("  Mean RMSLE: ", round(res_tp_rf_en$rmsle_mean, 5))
+}
+
+# ---- Output helpers ----------------------------------------------------------
+
+.cv_out_dir <- function(label) {
+  d <- file.path(root, "outputs", "cv", label)
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  d
+}
+
+# Row for best_results table from a tidymodels tune result
+.best_row_ss <- function(res_obj, label) {
+  tune::show_best(res_obj, metric = "rmse", n = 1) %>%
+    dplyr::mutate(model = label) %>%
+    dplyr::rename(rmsle_mean = mean, rmsle_sd = std_err) %>%
+    dplyr::select(model, rmsle_mean, rmsle_sd, n, dplyr::everything())
+}
+
+# Row for best_results table from a two-part result list
+.best_row_tp <- function(tp_res, label) {
+  data.frame(
+    model      = label,
+    rmsle_mean = tp_res$rmsle_mean,
+    rmsle_sd   = tp_res$rmsle_sd,
+    n          = length(tp_res$fold_rmsle),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Per-fold RMSLE df at best hyperparams (single-stage)
+.fold_row_ss <- function(res_obj, label) {
+  best_p <- tune::select_best(res_obj, metric = "rmse")
+  tryCatch(
+    tune::collect_metrics(
+      tune::filter_parameters(res_obj, parameters = best_p),
+      summarize = FALSE
+    ) %>%
+      dplyr::filter(.metric == "rmse") %>%
+      dplyr::mutate(model = label) %>%
+      dplyr::select(model, fold = id, rmsle = .estimate),
+    error = function(e) NULL
+  )
+}
+
+# Per-fold RMSLE df (two-part)
+.fold_row_tp <- function(tp_res, label) {
+  data.frame(
+    model = label,
+    fold  = paste0("Fold", seq_along(tp_res$fold_rmsle)),
+    rmsle = tp_res$fold_rmsle,
+    stringsAsFactors = FALSE
+  )
+}
+
+# ---- Collect results ---------------------------------------------------------
 
 .best_chunks <- list()
-if (!is.null(res_ridge)) .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_ridge, "ridge")
-if (!is.null(res_lasso)) .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_lasso, "lasso")
-if (!is.null(res_enet))  .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_enet, "elasticnet")
-if (!is.null(res_rf))    .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_rf, "random_forest")
-if (!is.null(res_xgb))   .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_xgb, "xgboost")
-if (!is.null(res_lgbm))  .best_chunks[[length(.best_chunks) + 1L]] <- best_one(res_lgbm, "lightgbm")
+.fold_chunks <- list()
 
-if (!length(.best_chunks)) stop("No model tuning results collected (check MODEL_INDEX).")
+collect_ss <- function(res_obj, label) {
+  if (is.null(res_obj)) return(invisible(NULL))
+  .best_chunks[[length(.best_chunks) + 1L]] <<- .best_row_ss(res_obj, label)
+  .fold_chunks[[length(.fold_chunks) + 1L]]  <<- .fold_row_ss(res_obj, label)
+}
+collect_tp <- function(tp_res, label) {
+  if (is.null(tp_res)) return(invisible(NULL))
+  .best_chunks[[length(.best_chunks) + 1L]] <<- .best_row_tp(tp_res, label)
+  .fold_chunks[[length(.fold_chunks) + 1L]]  <<- .fold_row_tp(tp_res, label)
+}
+
+collect_ss(res_ridge,    "ridge")
+collect_ss(res_lasso,    "lasso")
+collect_ss(res_enet,     "elasticnet")
+collect_ss(res_rf,       "random_forest")
+collect_ss(res_xgb,      "xgboost")
+collect_ss(res_lgbm,     "lightgbm")
+collect_tp(res_tp_rf_rf,  "two_part_rf_rf")
+collect_tp(res_tp_rf_xgb, "two_part_rf_xgb")
+collect_tp(res_tp_rf_en,  "two_part_rf_en")
+
+if (!length(.best_chunks)) stop("No model results collected (check MODEL_INDEX).")
 
 best_results <- dplyr::bind_rows(.best_chunks) %>%
-  dplyr::rename(rmsle_mean = mean, rmsle_sd = std_err) %>%
-  dplyr::select(model, rmsle_mean, rmsle_sd, n, dplyr::everything()) %>%
   dplyr::arrange(rmsle_mean)
 
-message("\n---- CV RMSLE Summary ----")
-print(dplyr::select(best_results, model, rmsle_mean, rmsle_sd))
-
-# Per-fold metrics at best hyperparameter setting (for plots)
-fold_results_best <- function(res, label) {
-  best_params <- tune::select_best(res, metric = "rmse")
-  tune::collect_metrics(
-    tune::filter_parameters(res, parameters = best_params),
-    summarize = FALSE
-  ) %>%
-    dplyr::filter(.metric == "rmse") %>%
-    dplyr::mutate(model = label) %>%
-    dplyr::select(model, fold = id, rmsle = .estimate)
-}
-
-.fold_best_chunks <- list()
-if (!is.null(res_ridge)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_ridge, "ridge")
-}
-if (!is.null(res_lasso)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_lasso, "lasso")
-}
-if (!is.null(res_enet)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_enet, "elasticnet")
-}
-if (!is.null(res_rf)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_rf, "random_forest")
-}
-if (!is.null(res_xgb)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_xgb, "xgboost")
-}
-if (!is.null(res_lgbm)) {
-  .fold_best_chunks[[length(.fold_best_chunks) + 1L]] <- fold_results_best(res_lgbm, "lightgbm")
-}
-
 fold_results <- tryCatch(
-  dplyr::bind_rows(.fold_best_chunks),
+  dplyr::bind_rows(.fold_chunks),
   error = function(e) {
-    message("Note: per-fold results at best params unavailable; skipping distribution plot.")
+    message("Note: per-fold results unavailable for some models; skipping fold plots.")
     NULL
   }
 )
 
-# ---- Save outputs ------------------------------------------------------------
+message("\n---- CV RMSLE Summary ----")
+print(dplyr::select(best_results, model, rmsle_mean, rmsle_sd))
 
-out_dir <- file.path(root, "outputs")
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+# ---- Save per-model outputs --------------------------------------------------
 
-.out_suffix <- if (single_model) {
-  paste0("_", MODEL_LABELS[MID], "_", MID)
-} else {
-  ""
-}
-
-summary_path <- file.path(out_dir, paste0("cv_results_summary", .out_suffix, ".csv"))
-write.csv(best_results, summary_path, row.names = FALSE)
-message("Saved: ", summary_path)
-
-rds_path <- file.path(out_dir, paste0("cv_results_full", .out_suffix, ".rds"))
-.rds_out <- list()
-if (!is.null(res_ridge)) .rds_out$ridge <- res_ridge
-if (!is.null(res_lasso)) .rds_out$lasso <- res_lasso
-if (!is.null(res_enet)) .rds_out$elasticnet <- res_enet
-if (!is.null(res_rf)) .rds_out$random_forest <- res_rf
-if (!is.null(res_xgb)) .rds_out$xgboost <- res_xgb
-if (!is.null(res_lgbm)) .rds_out$lightgbm <- res_lgbm
-saveRDS(.rds_out, rds_path)
-message("Saved: ", rds_path)
-
-# ---- Plots -------------------------------------------------------------------
-
+# Forward declaration so linter resolves the name; source() overwrites it.
+plot_cv_comparison <- NULL
 source(file.path(root, "src", "cv_plots.R"))
-fig_dir <- file.path(out_dir, "figures")
-if (single_model) {
-  fig_dir <- file.path(out_dir, "figures", paste0(MID, "_", MODEL_LABELS[MID]))
+
+save_ss_outputs <- function(res_obj, label) {
+  if (is.null(res_obj)) return(invisible(NULL))
+  out_dir <- .cv_out_dir(label)
+
+  best_row <- .best_row_ss(res_obj, label)
+  write.csv(best_row, file.path(out_dir, "cv_summary.csv"), row.names = FALSE)
+  saveRDS(setNames(list(res_obj), label), file.path(out_dir, "cv_full.rds"))
+  message("Saved: ", file.path(out_dir, "cv_full.rds"))
+
+  fold_row <- .fold_row_ss(res_obj, label)
+  if (!is.null(fold_row))
+    write.csv(fold_row, file.path(out_dir, "cv_fold_results.csv"), row.names = FALSE)
+
+  fig_dir <- file.path(out_dir, "figures")
+  plot_cv_comparison(
+    summary_tbl = best_row,
+    fold_tbl    = fold_row,
+    outdir      = fig_dir
+  )
 }
-dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
 
-plot_cv_comparison(
-  summary_tbl = best_results,
-  fold_tbl    = fold_results,
-  outdir      = fig_dir
-)
+save_tp_outputs <- function(tp_res, label) {
+  if (is.null(tp_res)) return(invisible(NULL))
+  out_dir <- .cv_out_dir(label)
 
-message("\nDone.")
+  best_row <- .best_row_tp(tp_res, label)
+  write.csv(best_row, file.path(out_dir, "cv_summary.csv"), row.names = FALSE)
+  saveRDS(tp_res, file.path(out_dir, "cv_full.rds"))
+  message("Saved: ", file.path(out_dir, "cv_full.rds"))
+
+  fold_row <- .fold_row_tp(tp_res, label)
+  write.csv(fold_row, file.path(out_dir, "cv_fold_results.csv"), row.names = FALSE)
+
+  fig_dir <- file.path(out_dir, "figures")
+  plot_cv_comparison(
+    summary_tbl = best_row,
+    fold_tbl    = fold_row,
+    outdir      = fig_dir
+  )
+}
+
+save_ss_outputs(res_ridge,    "ridge")
+save_ss_outputs(res_lasso,    "lasso")
+save_ss_outputs(res_enet,     "elasticnet")
+save_ss_outputs(res_rf,       "random_forest")
+save_ss_outputs(res_xgb,      "xgboost")
+save_ss_outputs(res_lgbm,     "lightgbm")
+save_tp_outputs(res_tp_rf_rf,  "two_part_rf_rf")
+save_tp_outputs(res_tp_rf_xgb, "two_part_rf_xgb")
+save_tp_outputs(res_tp_rf_en,  "two_part_rf_en")
+
+message("\nDone. Outputs written to outputs/cv/{model_name}/")

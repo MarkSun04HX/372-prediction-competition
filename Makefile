@@ -1,4 +1,4 @@
-.PHONY: install clean eda process data train train-local
+.PHONY: install clean eda process data cv cv-local train train-local
 
 # Install all required R packages (run once before anything else).
 install:
@@ -22,11 +22,24 @@ process:
 data:
 	Rscript scripts/01_clean-data.R && Rscript scripts/02_eda.R && Rscript scripts/03_process-data.R
 
-# Submit six Slurm array tasks (one tuned model each); run on cluster login node.
-train:
+# Submit all 9 CV model jobs + 1 combine job on HPC (with SLURM dependencies).
+# Model jobs run sequentially (N_CORES=1) to avoid OOM from fork-based parallelism.
+# Requires: make data
+cv:
 	mkdir -p slurm_logs
-	sbatch slurm/train_model_comparison.sh
+	bash slurm/submit_all_cv.sh
 
-# Run all six models in one local R session (no Slurm).
+# Run all 9 CV models + combine locally (no SLURM), fully sequential.
+# Slow but useful for testing.  Requires: make data
+cv-local:
+	Rscript scripts/04_model-comparison.R && Rscript scripts/05_combine_cv.R
+
+# Train the best model (by CV RMSLE) on the full dataset and save to models/.
+# Requires: make cv  (and wait for combine job to finish)
+train:
+	mkdir -p slurm_logs models
+	sbatch --mem=32G slurm/train_best.sh
+
+# Train the best model locally (no SLURM).  Requires: make cv or make cv-local
 train-local:
-	Rscript scripts/04_model-comparison.R
+	Rscript scripts/06_train_best.R
