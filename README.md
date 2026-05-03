@@ -43,9 +43,11 @@ slurm/
 
 ## Data cleaning
 
-Five MEPS FYC panels (2019–2023) are pooled across years. Year-suffixed names (e.g. `AGE23X`) are harmonized to a common stem (`AGEX`), producing ~1,512 predictors after dropping Section 2.5.11 expenditure/utilization columns and survey design weights. Sentinel non-response codes (`-1/-7/-8/-9/-15`) are converted to `NA` before pooling — these are structurally informative (e.g. `-1 = inapplicable` means a screener was answered negatively), so NA is preserved as a distinct value rather than imputed.
+Five MEPS FYC panels (2019–2023) are pooled across years. Year-suffixed names (e.g. `AGE23X`) are harmonized to a common stem (`AGEX`), producing ~1,512 predictors after dropping Section 2.5.11 expenditure/utilization columns and survey design weights.
 
-Full one-hot encoding of all ~1,366 categorical predictors would produce ~5,000–6,000 columns. Instead, a three-way treatment is applied based on variable type:
+**Sentinel recoding is a critical preprocessing step.** MEPS uses numeric codes (`-1/-7/-8/-9/-15`) for non-response. Keeping them as raw integers would corrupt ordinal variables — e.g. `-1 = inapplicable` would sit below `1 = excellent` on a health scale, creating a false numeric ordering that invalidates treating categories as ordered. All five sentinel codes are therefore unified to `NA` first, then recoded to `max_code + 1` — a value clearly outside the valid range that models can learn as a distinct "missing" state. This is what makes it valid to leave the ~1,345 ordinal and binary categoricals as plain integers without one-hot encoding: their numeric order is meaningful once negatives are removed.
+
+**Full one-hot encoding of all ~1,366 categorical predictors would produce ~5,000–6,000 columns** — a 4× blowup, mostly for ordinal/binary variables where integer coding is already correct. Instead, a three-way treatment is applied based on variable type:
 
 | Variable type | Treatment | Rationale |
 |---|---|---|

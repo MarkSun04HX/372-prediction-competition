@@ -546,6 +546,16 @@
 
 ---
 
+## 2026-05-03 — README: sentinel rationale + one-hot column count emphasis
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Add explanation of why sentinel→NA conversion is critical (prevents false ordinal ordering for negative codes); note this justifies keeping ordinal categoricals as integers; bold the ~5,000–6,000 column one-hot warning.
+- **Output summary:** Expanded the sentinel sentence in [`README.md`](README.md) into a bolded "critical step" paragraph explaining the false-ordering problem and how max+1 recoding resolves it; bolded the one-hot column count warning.
+- **What I used:** N/A (prose edit only).
+- **Verification:** N/A.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
