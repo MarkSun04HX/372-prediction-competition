@@ -86,17 +86,9 @@ message("Reading ", in_path, " ...")
 df <- read_parquet(in_path, as_data_frame = TRUE)
 message("  ", nrow(df), " rows x ", ncol(df), " cols")
 
-# ---- Pre-filter: drop columns with >90% missing ----------------------------
-# (Conservative threshold; doing this once before CV avoids repeated recipe
-#  computation and prevents near-all-NA columns from affecting imputation.)
-
-na_frac   <- colMeans(is.na(df))
-high_na   <- names(na_frac)[na_frac > 0.9]
-if (length(high_na)) {
-  df <- df[, setdiff(names(df), high_na), drop = FALSE]
-  message("Dropped ", length(high_na), " columns with >90% missing.")
-}
 message("Working dataset: ", nrow(df), " rows x ", ncol(df), " cols")
+# NA handling and categorical encoding are fully resolved in 03_process-data.R.
+# No pre-filter or imputation needed here.
 
 # ---- CV folds ----------------------------------------------------------------
 
@@ -105,16 +97,20 @@ cv_folds <- rsample::vfold_cv(df, v = N_FOLDS, strata = "TOTEXP_LOG1P")
 
 # ---- Recipes -----------------------------------------------------------------
 
+# 03_process-data.R has already:
+#   - One-hot encoded nominal variables (NA as its own level)
+#   - Recoded NA in ordinal/binary categoricals to a distinct integer level
+#   - Dropped all continuous columns that had any NA
+# So no imputation or pre-filter is needed here.
+
 # Base recipe: used by tree-based models (no normalisation needed).
 #   - Removes TOTEXP (raw dollars) so it cannot leak into predictors.
-#   - Removes any remaining zero-variance columns.
-#   - Median-imputes all numeric predictors.
+#   - Removes any remaining zero-variance columns (safety net only).
 rec_base <- recipes::recipe(TOTEXP_LOG1P ~ ., data = df) %>%
   recipes::step_rm(TOTEXP) %>%
-  recipes::step_zv(recipes::all_predictors()) %>%
-  recipes::step_impute_median(recipes::all_numeric_predictors())
+  recipes::step_zv(recipes::all_predictors())
 
-# Linear recipe: additionally normalises predictors for glmnet / lm.
+# Linear recipe: additionally normalises predictors for glmnet.
 rec_linear <- rec_base %>%
   recipes::step_normalize(recipes::all_numeric_predictors())
 

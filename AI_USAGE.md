@@ -506,6 +506,16 @@
 
 ---
 
+## 2026-05-03 — Categorical encoding, NA handling, pipeline cleanup
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Inspect dataset; plan and implement proper categorical encoding — one-hot for nominal vars with NA as its own level, integer-recode for ordinal/binary NAs, drop continuous vars with any NA (no imputation); add numeric missingness EDA output; simplify `04` recipe; write new `README.md` combining repo structure and cleaning rationale; explain why current R pipeline has ~1,500 cols vs old ~1,900.
+- **Output summary:** Added **`meps_nominal_vars()`** to [`src/exclude_variables.R`](src/exclude_variables.R) listing 21 unordered categorical variables (REGION, RACETHX, RACEV1X, RACEV2X, HISPNCAT, INTVLANG, MARRY31X/42X/53X/19X, INSCOV, INSCOP/31/42/53, EMPST31/42/53). Appended numeric missingness section to [`scripts/02_eda.R`](scripts/02_eda.R) writing **`data/processed/eda_numeric_missingness.csv`**. Rewrote [`scripts/03_process-data.R`](scripts/03_process-data.R): drops 89 continuous columns with any NA; one-hot encodes 21 nominal vars (NA → max+1 integer level, then model.matrix, drop reference); recodes NA in all remaining ~1,345 categorical columns to max+1 integer in-place. Simplified [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R) recipe: removed `step_impute_median`, `step_indicate_na`, and the >90%-missing pre-filter (all handled in `03` now). Wrote new [`README.md`](README.md) with repo directory map and full cleaning rationale section. Analysed the ~447-column gap between old Python (1,959-col) and new R (1,512-col) parquet: ~385 cols from harmonization collapsing year-specific duplicates (AGE19X/20X/…/23X → AGEX); ~80 cols from more complete exclusion of OTH/PTR payment-source sub-categories in the R exclusion list. Expected processed parquet: ~1,537 predictor columns.
+- **What I used:** `src/exclude_variables.R`, `scripts/02_eda.R`, `scripts/03_process-data.R`, `scripts/04_model-comparison.R`, `data/processed/eda_sd_summary.csv` (stale), live parquet column introspection via R.
+- **Verification:** Lints on edited files — 4 pre-existing NSE warnings in `04_model-comparison.R` unrelated to this change; no new errors introduced. Scripts parse-check via `Rscript -e 'parse(...)'` pending user's next run.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

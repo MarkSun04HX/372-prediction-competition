@@ -1,190 +1,93 @@
-# ECN372 Prediction Competition
+# ECN 372 Healthcare Spending Prediction Competition
 
-Group work for **ECN372-B: Prediction and Machine Learning in Econometrics** (Wake Forest University, Spring 2026). Goal: predict **individual-level total healthcare expenditures** from MEPS public data and submit predictions on a held-out test set.
-
----
-
-## Competition outline (from course instructions)
-
-### 1. Objective
-
-Build a model that predicts **total healthcare spending per person per year** as accurately as possible under the official scoring rule (RMSLE on a log scale; see below).
-
-### 2. Data: what to use
-
-| Item | Detail |
-|------|--------|
-| **Source** | [MEPS Household Component — download data files](https://meps.ahrq.gov/mepsweb/data_stats/download_data_files.jsp) |
-| **Files** | **Full-Year Consolidated** (Household Full Year File), one row per person, 1000+ variables per year |
-| **Years allowed** | **2019 through 2023** (inclusive) |
-| **Formats** | SAS transport, Stata, and ASCII (pick what fits your pipeline) |
-
-**File numbers (Household Full Year):**
-
-| Year | File |
-|------|------|
-| 2019 | HC-216 |
-| 2020 | HC-224 |
-| 2021 | HC-233 |
-| 2022 | HC-243 |
-| 2023 | HC-251 |
-
-Each year has a **codebook and documentation** on the same download page—read them before serious modeling.
-
-**This repo (R):** Raw ASCII (if you keep it) under **`data/raw/ascii/`**. Place official **Stata** Full-Year PUFs **`h216.dta` … `h251.dta`** under **`data/raw/`**, then run **`Rscript scripts/01_clean-data.R`** to build **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (exclusions and harmonization via **`src/exclude_variables.R`**). Optionally run **`Rscript scripts/03_process-data.R`** to add **`TOTEXP_LOG1P`** and write **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** for modeling scripts that train on **`log(1 + TOTEXP)`** while keeping **`TOTEXP`** in dollars for RMSLE. Install CRAN packages with **`Rscript src/install_packages.R`**. Exploratory summaries and plots: **`Rscript scripts/02_eda.R`** reads the **non-processed** pooled file only (CSVs under **`data/processed/`**, figures under **`outputs/figures/`**, both gitignored). See **`data/README.md`**.
-
-**Test set note:** The instructor’s test set is a **random sample from MEPS in prior years**; **which years are not disclosed**. Plan for **cross-year generalization**: harmonize variable names (suffixes change with year), validate on held-out years when possible, and avoid overfitting a single year’s quirks.
-
-### 3. Target variable (predictand)
-
-- **Name pattern:** `TOTEXPyy` where `yy` is the two-digit year (e.g. `TOTEXP23` for 2023).
-- **Meaning:** Sum of **direct** payments for healthcare in that calendar year (OOP + private insurance + Medicaid + Medicare + other). **Excludes** OTC drugs and indirect payments not tied to specific events.
-- **Submission:** Predict **levels (dollars)**. The **evaluation metric** is defined on a **log-type scale**, so the **distribution** (zeros, skew, heavy tails) matters as much as the mean.
-
-### 4. Variables you must NOT use
-
-1. **All utilization, expenditure, charge, and source-of-payment variables** (codebook **Section 2.5.11**). Rule of thumb: if it measures **how much care was used** or **how much was paid** during the year, it is **out**. The PDF lists the full block from **`TOTTCH` through `RXOSR`** (and states: anything else in Section 2.5.11 is also excluded even if not listed verbatim).
-2. **Survey design / weight variables:** `PERWTyyF`, `VARSTR`, `VARPSU`, and **all BRR replicate weight** variables.
-
-**Allowed examples** (non-exhaustive): survey administration (2.5.1), demographics (2.5.3), income/taxes (2.5.4), priority conditions (2.5.5), health status (2.5.6), disability days (2.5.7), access to care (2.5.8), employment (2.5.9), insurance (2.5.10)—**subject to** not crossing into 2.5.11.
-
-### 5. Scoring
-
-**Root mean squared logarithmic error (RMSLE):**
-
-\[
-\text{RMSLE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\bigl(\log(1+\hat y_i) - \log(1+y_i)\bigr)^2}
-\]
-
-- \(\hat y_i\): predicted dollars; **clip negative predictions to 0** before scoring.
-- Large **proportional** errors are costly; the model should work across **low and high** spenders, not only the conditional mean in levels.
+Predict total individual healthcare expenditure (`TOTEXP`) from five years of MEPS Full-Year Consolidated (FYC) data (2019–2023). Evaluated by RMSLE on a held-out year.
 
 ---
 
-## Data pipeline: how selections and variables are built (this repo)
+## Repo structure
 
-This section matches **`src/install_packages.R`**, **`scripts/01_clean-data.R`**, **`scripts/03_process-data.R`**, **`scripts/02_eda.R`**, and **`scripts/tuning/`** (selection sample, PCA scores, CV experiments). Exclusion helpers live in **`src/exclude_variables.R`**. The pooled modeling table matches **`selection_data.parquet`** inputs used in exploratory CV (e.g. elastic net, `rpart`). **PCA rotation (loadings) is not saved** anywhere; only **scores** (`PC1`, …) appear in `selection_data.parquet`.
+```
+scripts/
+  01_clean-data.R        Read raw Stata files → sentinel recoding → harmonize names → pool → parquet
+  02_eda.R               Per-variable stats, pairwise correlations, target distribution plots
+  03_process-data.R      Categorical encoding, NA handling, log target → processed parquet
+  04_model-comparison.R  5-fold CV across six tuned models (ridge/lasso/enet/RF/XGB/LightGBM)
 
-### 1. Install R packages
+src/
+  exclude_variables.R    Exclusion stems (Section 2.5.11), survey-design names, meps_nominal_vars()
+  install_packages.R     Checks and installs all required R packages
+  cv_plots.R             ggplot2 helpers for CV output figures
 
-**Command:** `Rscript src/install_packages.R`
+data/
+  raw/                   MEPS Stata .dta files (gitignored; re-download via --download flag)
+  processed/             Parquet outputs and EDA CSVs (gitignored except JSON manifests)
 
-### 2. Pooled modeling table (`meps_fyc_2019_2023_pooled_for_modeling.parquet`)
+codebooks/               MEPS FYC codebooks (h216cb.pdf … h251cb.pdf)
+config/                  Excluded variable stems and expanded column lists
+slurm/                   Batch script for HPC (SLURM array, one task per model)
+outputs/                 CV result CSVs, RDS objects, figures (gitignored)
+```
 
-**Command:** `Rscript scripts/01_clean-data.R`
+**Quick start:**
 
-1. Expects **`data/raw/h216.dta`**, **`h224.dta`**, **`h233.dta`**, **`h243.dta`**, **`h251.dta`** (MEPS Full-Year Consolidated Stata files).
-2. For each year **2019–2023**, reads with **`haven::read_dta`**, drops excluded columns via **`meps_expanded_exclusion_names()`** from **`src/exclude_variables.R`** (codebook **Section 2.5.11** stems plus survey-design names), **keeping** the target **`TOTEXP{yy}`** which becomes **`TOTEXP`** after harmonization.
-3. **`meps_survey_design_present()`** must pass after drops.
-4. **`meps_harmonize_names(df, yy)`** strips year suffixes; **`FYC_YEAR`** is added; **`dplyr::bind_rows`** pools all years.
-5. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`**.
-
-### 3. Processed modeling table (`log(1+y)` column for training)
-
-**Command:** `Rscript scripts/03_process-data.R`
-
-1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
-2. Leaves **`TOTEXP`** unchanged (dollars).
-3. Adds **`TOTEXP_LOG1P`** = **`log1p(TOTEXP)`** for models that regress on **`log(1 + y)`** directly.
-4. Writes **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** — use this for **new** prediction pipelines; RMSLE evaluation still compares predictions to **`TOTEXP`** in dollars (back-transform model output as needed).
-
-### 4. EDA (tabular + target distribution figure)
-
-**Command:** `Rscript scripts/02_eda.R`
-
-Reads the **non-processed** pooled Parquet (**not** the `_processed` file). Writes **`eda_sd_summary.csv`** and **`eda_correlation_long.csv`** under **`data/processed/`** (gitignored with **`data/processed`**). Writes **`outputs/figures/totexp_distribution_raw_vs_log1p.png`** under **`outputs/figures/`** (gitignored with **`outputs/`**).
-
-### 5. Model comparison (`scripts/04_model-comparison.R`)
-
-Requires **`data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet`** (from §§2–3).
-
-| Where | Command |
-|------|---------|
-| **Slurm (HPC)** | From the repo root: **`make train`** — creates **`slurm_logs/`**, runs **`sbatch slurm/train_model_comparison.sh`** (loads **`module apps/r/4.3.3`**; job array **1–6**, one model per task; **`slurm_logs/cv_*.{out,err}`** — gitignored). |
-| **Local machine** | **`make train-local`** — installs packages, then runs **`04_model-comparison.R`** once (all six models in sequence). |
-
-### 6. Selection sample, train/test holdout, and PCA columns
-
-**Script:** `scripts/tuning/build_selection_data.R`. Environment variables: **`SEED`** (default **`42`**), **`N_PC`** (default **`220`**), and either **`N_TRAIN`** / **`N_TEST`** or legacy **`N_ROW`**.
-
-**Default (holdout):** **`N_TRAIN=10000`**, **`N_TEST=2000`**. The script draws **`N_TRAIN + N_TEST`** distinct rows from the pooled file, randomly splits them into train and test, then:
-
-1. **Input:** **`data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`** (must exist).
-2. **Feature matrix (train):** All columns **except** **`TOTEXP`** and **`FYC_YEAR`**, **numeric** only, drop columns with **`sd ≤ 1e-10`**, median-impute **`NA`** using **train** column medians.
-3. **Feature matrix (test):** Same column set as train; median-impute **`NA`** using **those train medians** (no peeking at test distributions beyond the fixed column list).
-4. **PCA:** **`irlba::prcomp_irlba`** is fit **only on the training matrix** (`center = TRUE`, `scale. = TRUE`, **`n = min(N_PC, p, …)`**, **`maxit = 300`**). Test rows are projected with **`stats::predict(prcomp_object, newdata = …)`** so the test PCs use the **train** center, scale, and rotation.
-5. **Outputs:** **`selection_train.parquet`** and **`selection_test.parquet`** (each: **`PC*`**, **`TOTEXP`**, **`FYC_YEAR`**). **`selection_data.parquet`** is a **copy of the training table** so older scripts that expect a single `selection_data` file still see **10,000 train rows** only. **`selection_train_test_manifest.json`** records counts and paths.
-
-**Legacy single file:** set **`N_ROW=10000`** (and do not set a positive **`N_TEST`**) to sample **`N_ROW`** rows, run PCA on **all** of them, and write only **`selection_data.parquet`** (previous one-table behavior).
-
-**Only PC scores are stored**; PCA **loadings** are **not** written to disk.
-
-**Caveat:** The default holdout is **one random split**; metrics on the 2k test rows are **not** cross-validated. For model comparison, either repeat with different seeds or use nested CV if you need variance estimates.
-
-### 7. CV summaries and `CV_RMSE_RESULTS.md`
-
-Scripts under **`scripts/tuning/`** (e.g. **`run_lasso_elasticnet_selection.R`**, **`run_regression_tree_selection.R`**, **`run_rf_xgb_selection.R`**) read **`selection_data.parquet`** (training rows only when the holdout build was used), take **`PC*`** as predictors and **`TOTEXP`** as the response, and write JSON under **`data/processed/`**. **`run_xgb_tune_holdout.R`** fits and tunes **XGBoost** on **`selection_train.parquet`** and scores **`selection_test.parquet`** (no 10-fold loop). **`build_cv_rmse_results_md.R`** assembles **`CV_RMSE_RESULTS.md`**.
+```bash
+make clean        # install packages → 01 → 03  (builds processed parquet)
+make train        # submit 6-model SLURM array (cluster only)
+make train-local  # run 04_model-comparison.R locally (no SLURM)
+```
 
 ---
 
-## Suggested workflow (step by step)
+## Data cleaning rationale
 
-1. **Governance & repo**  
-   Use **R** for pipeline scripts; track decisions and [AI usage](AI_USAGE.md).
+### Source data
 
-2. **Download & inventory**  
-   Pull **2019–2023** consolidated files; note **format** and **documentation** links for each year.
+Five MEPS FYC panels (2019–2023), loaded from Stata `.dta` files. After dropping all competition-excluded variables (Section 2.5.11 expenditure/utilization columns and survey design weights), the pooled dataset has **~1,512 columns** across 126,003 person-year observations.
 
-3. **Read codebooks**  
-   Map **allowed** vs **excluded** fields programmatically where possible; document any ambiguous variables.
+Of those ~1,512 columns, roughly **1,366 are categorical** (≤ 20 distinct values after recoding) and only **~126 are continuous** (> 20 distinct values). Most categorical variables are binary or small-scale ordinal health/insurance/demographic indicators.
 
-4. **Harmonize across years**  
-   Strip/replace year suffixes on column names; align types; build a **single pooled schema** with a `year` (or survey wave) key.
+### Sentinel code recoding
 
-5. **Target pipeline**  
-   Construct `y` from `TOTEXPyy` per row; confirm definition matches instructions; keep **raw dollars** for evaluation-style checks even if you train on transforms.
+MEPS uses numeric sentinel codes for non-response: `-1` = inapplicable, `-7` = refused, `-8` = don't know, `-9` = not ascertained, `-15` = cannot be computed. `01_clean-data.R` converts all five to `NA` before pooling.
 
-6. **Missing / reserved codes**  
-   Replace or impute per codebook (e.g. inapplicable, refused, don’t know). Treat as **first-class** data problems, not afterthoughts.
+Importantly, these NAs are **not random missingness** — `-1 = inapplicable` means the question was never asked because an earlier screener was negative (e.g., a person with no dental visits gets `-1` for every dental follow-up question). This structural missingness carries real information.
 
-7. **EDA**  
-   Mass at **zero**, skew, tails; relationships of **allowed** predictors to spending and to **log(1+y)**; correlation and leakage checks (accidentally including excluded spend/utilization columns).
+### The categorical encoding problem
 
-8. **Feature work**  
-   With 1000+ columns: **screening**, **regularization**, **dimension reduction** (e.g. PCA on a sensible subset), domain-driven groups (demographics, insurance, health, income), and interaction hypotheses—always respecting exclusions.
+The straightforward solution — one-hot encode every categorical variable — is impractical here. Full one-hot encoding of all ~1,366 categorical variables (treating NA as its own level) would produce roughly **5,000–6,000 columns**, a 4× blowup. Most of that inflation comes from ordinal and binary variables (health status 1–5, yes/no condition flags) where integer coding is already meaningful and one-hot would add nothing.
 
-9. **Modeling candidates (potential models)**  
-   Mix **interpretable** and **flexible** baselines; validate with **year-based splits** to mimic undisclosed test years.
+### Our three-way treatment
 
-   | Approach | Why consider it |
-   |----------|------------------|
-   **OLS / GLM on `log(1+y)`** | Aligns loss intuition with RMSLE; simple benchmark. |
-   **Regularized linear models (Ridge, Lasso, Elastic Net)** | Many correlated predictors; shrinkage and variable selection. |
-   **Two-part / hurdle / mixture** | Large **zero** mass: model “any spend” then “amount if positive,” or use distributions suited to zeros. |
-   **GAM / splines** | Smooth nonlinearities for key continuous predictors while staying interpretable. |
-   **Tree ensembles (Random Forest, Gradient Boosting, XGBoost, LightGBM, CatBoost)** | Strong default for tabular data, interactions, skewed targets (often with **log** or **tweedie**-style objectives where appropriate). |
-   **Stacking / blending** | Combine linear + tree models if they make different errors. |
+`03_process-data.R` applies a different rule to each variable type:
 
-   **Years for training experiments:** Use **2019–2023** as the official training pool. For **validation**, simulate the competition by **holding out entire year(s)** or **random person splits within year**, and prefer **holdout-by-year** when feasible given sample size.
+**1. Nominal variables (21 vars) → one-hot encode, NA as its own level**
 
-10. **Calibration to RMSLE**  
-    Post-process or train with objectives that match **log(1+y)** error in spirit; always **clip** negatives at submission.
+Nominal variables are those whose numeric codes are arbitrary labels with no natural rank — REGION (1=Northeast, 2=Midwest, 3=South, 4=West), race/ethnicity groups, marital status, insurance plan type, employment status, interview language. For these, treating the raw integer as a scale is wrong: a linear model would interpret "West (4)" as twice "Midwest (2)".
 
-11. **Final model & submission prep**  
-    Freeze feature list, training script, seed, and row-ID alignment rules for the instructor’s test file format once provided.
+We convert NA to `max_code + 1` (making it a distinct integer), then create one 0/1 dummy column per category, dropping one reference level. The full list of 21 nominal variables is defined in `src/exclude_variables.R → meps_nominal_vars()`.
 
-12. **Write-up**  
-    Document data cleaning, exclusions enforcement, model choice, and failure modes (e.g. zero-heavy slices, high spenders).
+This adds ~135 dummy columns while removing 21 originals — a net gain of ~114 columns.
 
----
+**2. Other categorical variables (~1,345 vars) → recode NA to a new integer level**
 
-## Quick links
+All remaining categorical variables (ordinal health status scales, binary condition flags, education tiers, poverty categories, etc.) are kept as single integer columns. NA is replaced with `max_code + 1`, giving every model a distinct integer it can learn from. No new columns are created. Tree-based models split on these integers naturally; linear models treat them as ordered scales, which is defensible for genuinely ordinal variables.
 
-- [MEPS download — data files](https://meps.ahrq.gov/mepsweb/data_stats/download_data_files.jsp)  
-- Course artifact: `prediction-competition-init-instructions.pdf` (local copy of init instructions)
+This directly implements the professor's suggestion: **the fact that a variable is missing carries information** and should be preserved rather than imputed or ignored.
+
+**3. Continuous variables with any NA → drop entirely**
+
+Of the ~126 continuous columns, 89 have some NA. The majority (73) are >50% missing because they are single-panel annual variables (e.g., `FAMWT23F`, `DIABW20F`, `EMPHAGED`) that only exist for one survey year and are structurally absent for the other four. Imputing these would mean filling 75–99% of the column with guesses. The remaining 16 have lower missingness but include specialized variables (`K6SUM42`, `VMCS42`, `VPCS42`, `TYPEPE42`) where the missingness pattern is tied to survey design.
+
+No imputation is applied anywhere. All 89 columns are dropped; the 54 continuous columns with zero missing are kept.
+
+### Final processed dataset
+
+After all three steps, the processed parquet has approximately **~1,537 predictor columns**: the ~1,345 recoded-categorical columns plus ~135 dummy columns plus the 54 zero-NA continuous columns, minus any zero-variance columns removed as a final safety step.
+
+The model target is `TOTEXP_LOG1P = log1p(TOTEXP)`. Training on this log-scale target and evaluating with RMSE on it equals RMSLE on the dollar scale, which is the competition metric.
 
 ---
 
-## AI assistance
+## AI usage
 
-This project records tool-assisted work in **[AI_USAGE.md](AI_USAGE.md)** (dated sections with **Tool / Prompt / Output summary / What I used / Verification**). The log’s **Convention (standing)** block describes how the assistant updates it each turn; project rule **`.cursor/rules/ai-usage-log.mdc`** reminds Cursor to append without you asking.
+See `AI_USAGE.md` for a dated log of all substantive AI-assisted work in this project.

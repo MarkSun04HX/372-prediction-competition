@@ -141,6 +141,32 @@ meps_harmonize_names <- function(df, yy) {
   df
 }
 
+#' Nominal (unordered categorical) variables to one-hot encode.
+#'
+#' These variables use numeric codes as arbitrary labels with no natural order
+#' (e.g. REGION: 1=Northeast, 2=Midwest, 3=South, 4=West).  Integer coding
+#' would impose a false ordering on linear models, so each is expanded into
+#' dummy columns with NA treated as its own category.
+#'
+#' Ordinal variables (health status 1-5, education, poverty tier, etc.) are
+#' intentionally left as integer columns and are NOT listed here.
+meps_nominal_vars <- function() {
+  c(
+    # Geographic region (4 US Census regions — no natural rank)
+    "REGION", "REGION31", "REGION42", "REGION53",
+    # Race / ethnicity (arbitrary label codes)
+    "RACETHX", "RACEV1X", "RACEV2X", "HISPNCAT",
+    # Interview language (codes 1, 2, 91 — non-sequential)
+    "INTVLANG",
+    # Marital status (married/widowed/divorced/separated/never married — no rank)
+    "MARRY31X", "MARRY42X", "MARRY53X", "MARRY19X",
+    # Insurance coverage and plan type (type categories, not intensity)
+    "INSCOV", "INSCOP", "INSCOP31", "INSCOP42", "INSCOP53",
+    # Employment status (full-time/part-time/unemployed/NILF — type, not rank)
+    "EMPST31", "EMPST42", "EMPST53"
+  )
+}
+
 #' Replace MEPS sentinel codes with NA.
 #'
 #' MEPS reserved codes: -1 inapplicable, -7 refused, -8 don't know,

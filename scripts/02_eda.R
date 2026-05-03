@@ -242,4 +242,39 @@ for (thr in c(0.9, 0.95, 0.99)) {
   message("  |r| > ", thr, ": ", n_distinct, " distinct vars")
 }
 
+# ---- Numeric variable missingness summary ------------------------------------
+# Reports continuous predictors (n_unique > 20) that have any NA after sentinel
+# recoding.  These are the variables that 03_process-data.R will drop entirely
+# (no imputation).  Written to eda_numeric_missingness.csv for reference.
+
+out_num_na <- file.path(root, "data", "processed", "eda_numeric_missingness.csv")
+
+NA_THRESHOLD <- 20L   # n_unique above this = "continuous"
+
+cont_na_rows <- sd_df[
+  sd_df$variable %in% pred_names &
+  sd_df$n_unique  > NA_THRESHOLD  &
+  sd_df$n_missing > 0,
+  c("variable", "n_unique", "n_missing", "pct_missing"),
+  drop = FALSE
+]
+cont_na_rows <- cont_na_rows[order(-cont_na_rows$pct_missing), , drop = FALSE]
+rownames(cont_na_rows) <- NULL
+
+utils::write.csv(cont_na_rows, out_num_na, row.names = FALSE)
+message("\n--- Continuous predictors with any NA (will be dropped in 03_process-data.R) ---")
+message("  Total: ", nrow(cont_na_rows))
+message("  >50% missing: ", sum(cont_na_rows$pct_missing > 50))
+message("  1-50% missing: ", sum(cont_na_rows$pct_missing > 0 & cont_na_rows$pct_missing <= 50))
+if (nrow(cont_na_rows)) {
+  message("  Top 10 by missingness:")
+  top10 <- head(cont_na_rows, 10L)
+  for (i in seq_len(nrow(top10))) {
+    message(sprintf("    %-20s  %6.1f%% missing (%d / %d)",
+                    top10$variable[i], top10$pct_missing[i],
+                    top10$n_missing[i], nrow(df_num)))
+  }
+}
+message("Wrote ", out_num_na)
+
 message("\nDone.")
