@@ -7,11 +7,24 @@ scripts/
   01_clean-data.R        Raw Stata → exclusions → pool → parquet
   02_eda.R               Variable stats, missingness report, target plot
   03_process-data.R      Categorical encoding, NA handling → processed parquet
-  04_model-comparison.R  5-fold CV (ridge/lasso/enet/RF/XGB/LightGBM)
+  04_model-comparison.R  5-fold CV 
 
-src/           Helpers: exclusion lists, package installer, plot utilities
-data/          Raw .dta files and processed parquets (gitignored)
-outputs/       eda/ summaries, figures/, CV results (gitignored)
+src/
+  exclude_variables.R
+  install_packages.R
+  cv_plots.R
+
+data/
+  raw/
+  processed/
+
+outputs/
+  eda/
+  figures/
+
+codebooks/
+config/
+slurm/
 ```
 
 **Makefile targets:**
