@@ -20,13 +20,17 @@ src/
 
 data/
   raw/                   MEPS Stata .dta files (gitignored; re-download via --download flag)
-  processed/             Parquet outputs and EDA CSVs (gitignored except JSON manifests)
+  processed/             Parquet outputs only (gitignored except JSON manifests)
 
 codebooks/               MEPS FYC codebooks (h216cb.pdf … h251cb.pdf)
 config/                  Excluded variable stems and expanded column lists
 slurm/                   Batch script for HPC (SLURM array, one task per model)
-outputs/                 CV result CSVs, RDS objects, figures (gitignored)
+outputs/                 Script outputs (gitignored)
+  eda/                   EDA summary CSVs from 02
+  figures/               Target plot (02) and CV plots (04)
 ```
+
+`04_model-comparison.R` also writes `cv_results_summary*.csv`, `cv_results_full*.rds`, etc. at the top level of `outputs/` (not under `figures/`).
 
 **Makefile targets:**
 

@@ -4,8 +4,8 @@
 # full-dataset missingness report (all predictors with any NA).
 #
 # Outputs:
-#   data/processed/eda_sd_summary.csv       — per-variable stats for all predictors
-#   data/processed/eda_missingness_all.csv  — all predictors with any NA, sorted by % missing
+#   outputs/eda/eda_sd_summary.csv         — per-variable stats for all predictors
+#   outputs/eda/eda_missingness_all.csv  — all predictors with any NA, sorted by % missing
 #   outputs/figures/totexp_distribution_raw_vs_log1p.png
 #
 # Usage (from repo root):
@@ -29,8 +29,11 @@ setwd(root)
 pooled_path <- file.path(root, "data", "processed", "meps_fyc_2019_2023_pooled_for_modeling.parquet")
 if (!file.exists(pooled_path)) stop("Missing ", pooled_path)
 
-out_sd      <- file.path(root, "data", "processed", "eda_sd_summary.csv")
-out_miss    <- file.path(root, "data", "processed", "eda_missingness_all.csv")
+eda_out_dir <- file.path(root, "outputs", "eda")
+dir.create(eda_out_dir, recursive = TRUE, showWarnings = FALSE)
+
+out_sd   <- file.path(eda_out_dir, "eda_sd_summary.csv")
+out_miss <- file.path(eda_out_dir, "eda_missingness_all.csv")
 
 message("Reading ", pooled_path, " ...")
 df <- arrow::read_parquet(pooled_path, as_data_frame = TRUE)

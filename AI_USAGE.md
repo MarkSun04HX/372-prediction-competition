@@ -526,6 +526,16 @@
 
 ---
 
+## 2026-05-03 — EDA CSV outputs moved to outputs/eda/
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Move EDA output CSVs from `data/processed/` to `outputs/eda/`; user will re-run pipeline.
+- **Output summary:** Updated [`scripts/02_eda.R`](scripts/02_eda.R) to `dir.create(…/outputs/eda)` and write **`outputs/eda/eda_sd_summary.csv`** and **`outputs/eda/eda_missingness_all.csv`**. Updated [`README.md`](README.md) repo structure: `data/processed/` is parquet-only; `outputs/` documents `eda/`, `figures/`, and 04 top-level artifacts.
+- **What I used:** Plan `eda_output_to_outputs_eda`.
+- **Verification:** N/A.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
