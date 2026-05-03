@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 # 01_clean-data.R
 # Read raw MEPS Stata files (2019-2023), drop excluded variables,
+# strip haven_labelled types, drop person identifiers (DUID/PID),
 # harmonize column names across years, pool into one dataset,
 # and write a single Parquet file for modeling.
 #
@@ -61,6 +62,14 @@ for (i in seq_len(nrow(year_map))) {
   }
 
   df <- meps_recode_sentinels(df)
+
+  # Strip haven_labelled to plain numeric so the pooled parquet has clean types
+  df[] <- lapply(df, function(x) {
+    if (inherits(x, "labelled")) as.numeric(haven::zap_labels(x)) else x
+  })
+
+  # Drop person identifiers — not predictors
+  df <- df[, setdiff(names(df), c("DUID", "PID")), drop = FALSE]
 
   df <- meps_harmonize_names(df, yy)
   if (!"TOTEXP" %in% names(df)) stop("TOTEXP missing after harmonization for year ", yr)

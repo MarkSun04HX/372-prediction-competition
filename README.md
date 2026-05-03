@@ -9,7 +9,7 @@ Predict total individual healthcare expenditure (`TOTEXP`) from five years of ME
 ```
 scripts/
   01_clean-data.R        Read raw Stata files → sentinel recoding → harmonize names → pool → parquet
-  02_eda.R               Per-variable stats, pairwise correlations, target distribution plots
+  02_eda.R               Per-variable stats, missingness report, target distribution plot
   03_process-data.R      Categorical encoding, NA handling, log target → processed parquet
   04_model-comparison.R  5-fold CV across six tuned models (ridge/lasso/enet/RF/XGB/LightGBM)
 
@@ -28,13 +28,20 @@ slurm/                   Batch script for HPC (SLURM array, one task per model)
 outputs/                 CV result CSVs, RDS objects, figures (gitignored)
 ```
 
-**Quick start:**
+**Makefile targets:**
 
-```bash
-make clean        # install packages → 01 → 03  (builds processed parquet)
-make train        # submit 6-model SLURM array (cluster only)
-make train-local  # run 04_model-comparison.R locally (no SLURM)
-```
+| Target | What it runs |
+|---|---|
+| `make install` | Install all required R packages (run once) |
+| `make clean` | `01_clean-data.R` — raw Stata → pooled parquet |
+| `make eda` | `02_eda.R` — EDA summaries and missingness report (requires `clean` first) |
+| `make process` | `03_process-data.R` — encoding and final processed parquet (requires `clean` first) |
+| `make data` | `01` → `02` → `03` in sequence (full data pipeline) |
+| `make train` | Submit 6-model SLURM array (cluster only) |
+| `make train-local` | Run `04_model-comparison.R` locally (no SLURM) |
+
+**Why two data preparation scripts (`01` and `03`)?**
+`01_clean-data.R` handles raw data concerns: loading Stata files, applying competition exclusions, sentinel recoding, and name harmonization. `03_process-data.R` applies decisions that depend on what EDA reveals: which continuous variables to drop (EDA shows most have >50% structural missingness tied to survey year), how to treat categorical NAs (EDA confirms missingness is informative, not random), and which variables to one-hot encode. Running `02_eda.R` between the two steps documents the findings that drive `03`'s decisions.
 
 ---
 

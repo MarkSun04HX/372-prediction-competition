@@ -3,22 +3,23 @@
 # Transform pooled modeling parquet (output of 01_clean-data.R) into a fully
 # encoded, NA-free dataset ready for 04_model-comparison.R.
 #
-# Steps applied in order:
-#   1. Coerce haven_labelled columns to plain numeric.
-#   2. Drop DUID / PID (person identifiers, not predictors).
-#   3. Drop all continuous columns (n_unique > N_UNIQUE_THRESH) that have any NA.
-#      No imputation anywhere — missingness in continuous vars is too high or
-#      structurally confounded with survey year to impute reliably.
-#   4. Add TOTEXP_LOG1P = log1p(TOTEXP) as the model target.
-#   5. One-hot encode nominal variables (meps_nominal_vars()):
+# Steps applied in order (decisions informed by 02_eda.R findings):
+#   1. Drop all continuous columns (n_unique > N_UNIQUE_THRESH) that have any NA.
+#      No imputation — EDA revealed missingness is structural (tied to survey year)
+#      and too pervasive to impute reliably.
+#   2. Add TOTEXP_LOG1P = log1p(TOTEXP) as the model target.
+#   3. One-hot encode nominal variables (meps_nominal_vars()):
 #        a. Replace NA with max_non_NA + 1 so NA becomes its own integer level.
 #        b. Expand via model.matrix (drop one reference level per var).
 #        c. Remove original column; attach named dummy columns.
-#   6. For all remaining categorical columns (n_unique <= N_UNIQUE_THRESH, not
+#   4. For all remaining categorical columns (n_unique <= N_UNIQUE_THRESH, not
 #      already one-hot encoded): replace NA with max_non_NA + 1 in place.
-#      NA is now a distinct integer the model can learn from — no new columns.
-#   7. Drop zero-variance columns.
-#   8. Write processed parquet and print a column-count summary.
+#      EDA confirmed NA is structural/informative, not random — it becomes a
+#      distinct integer the model can learn from.
+#   5. Drop zero-variance columns.
+#   6. Write processed parquet and print a column-count summary.
+#
+# Note: haven_labelled coercion and DUID/PID removal happen in 01_clean-data.R.
 #
 # Usage (from repo root):
 #   Rscript scripts/03_process-data.R
@@ -28,8 +29,7 @@
 #                     "categorical"; default 20
 
 suppressPackageStartupMessages({
-  if (!requireNamespace("arrow",  quietly = TRUE)) stop("install.packages('arrow')")
-  if (!requireNamespace("haven",  quietly = TRUE)) stop("install.packages('haven')")
+  if (!requireNamespace("arrow", quietly = TRUE)) stop("install.packages('arrow')")
 })
 
 # ---- Resolve repo root -------------------------------------------------------
@@ -55,26 +55,12 @@ out_path <- file.path(root, "data", "processed",
 if (!file.exists(in_path))
   stop("Missing pooled file — run scripts/01_clean-data.R first:\n  ", in_path)
 
-# ---- 1. Read & coerce --------------------------------------------------------
+# ---- 1. Read ----------------------------------------------------------------
+# haven_labelled coercion and DUID/PID removal are done in 01_clean-data.R.
 
 message("Reading ", in_path, " ...")
 df <- arrow::read_parquet(in_path, as_data_frame = TRUE)
 message("  ", nrow(df), " rows x ", ncol(df), " cols")
-
-# Coerce all haven_labelled columns to plain double
-labelled_cols <- names(df)[vapply(df, function(x) inherits(x, "labelled"), logical(1L))]
-if (length(labelled_cols)) {
-  df[labelled_cols] <- lapply(df[labelled_cols], function(x) as.numeric(haven::zap_labels(x)))
-  message("  Coerced ", length(labelled_cols), " haven_labelled columns to numeric.")
-}
-
-# ---- 2. Drop identifiers -----------------------------------------------------
-
-id_cols <- intersect(c("DUID", "PID"), names(df))
-if (length(id_cols)) {
-  df <- df[, setdiff(names(df), id_cols), drop = FALSE]
-  message("Dropped identifiers: ", paste(id_cols, collapse = ", "))
-}
 
 # ---- Classify columns --------------------------------------------------------
 

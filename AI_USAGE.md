@@ -516,6 +516,16 @@
 
 ---
 
+## 2026-05-03 — EDA cleanup, missingness CSV, Makefile restructure
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Remove correlation from EDA script; output a full-dataset missingness CSV for all variables with any NA; restructure Makefile into install/clean/eda/process/data targets; move steps that don't depend on EDA findings from `03` to `01`; update README.
+- **Output summary:** Rewrote [`scripts/02_eda.R`](scripts/02_eda.R): removed correlation block (seed/env vars, subsample, median impute, `cor()`, `eda_correlation_long.csv`, all console messages); replaced numeric-only missingness section with full-dataset **`data/processed/eda_missingness_all.csv`** covering all predictors with any NA (columns: variable, n_unique, n_missing, pct_missing, is_continuous). Added to [`scripts/01_clean-data.R`](scripts/01_clean-data.R): `zap_labels()` coercion and `DUID`/`PID` drop inside per-year loop (these are raw-data hygiene, not EDA-informed). Removed those same two steps from [`scripts/03_process-data.R`](scripts/03_process-data.R); also removed the `haven` package dependency from `03`. Rewrote [`Makefile`](Makefile): `install` (explicit), `clean` (01 only), `eda` (02 only), `process` (03 only), `data` (01→02→03), `train`, `train-local`. Updated [`README.md`](README.md): quick-start block replaced with Makefile target table; added "Why two data scripts?" paragraph.
+- **What I used:** Existing scripts and plan file.
+- **Verification:** `ReadLints` on all 5 edited files — no errors.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
