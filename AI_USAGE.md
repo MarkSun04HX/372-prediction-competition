@@ -536,6 +536,16 @@
 
 ---
 
+## 2026-05-03 — README cleanup (concise structure + data section)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Tighten README: remove redundant intro and two-scripts paragraph; shorten script comments only under `scripts/`; drop gitignored folder detail from tree; collapse data cleaning to brief prose + three-way table.
+- **Output summary:** Rewrote [`README.md`](README.md): title only; compact `scripts/` tree; one-line `src/`, `data/`, `outputs/`; Makefile table unchanged in substance; single **Data cleaning** section with harmonization/sentinel sentence, one-hot scale note, three-row table, one-line target metric note; kept **AI usage** pointer.
+- **What I used:** Plan `readme_cleanup`.
+- **Verification:** N/A.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
