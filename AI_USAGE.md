@@ -581,6 +581,26 @@
 
 ---
 
+## 2026-05-03 — Drop character Stata columns (IDs / string vars)
+
+- **Tool:** Cursor Agent
+- **Prompt:** Implement dropping non-numeric columns; prefer dropping in `01_clean-data.R`.
+- **Output summary:** In [`scripts/01_clean-data.R`](scripts/01_clean-data.R), after dropping `DUID`/`PID`, each yearly dataframe drops all remaining `is.character` columns (identifiers such as `DUPERSID`, `HIEUIDX`, string-coded vars). Updated header comments. In [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R), added `recipes::step_rm(where(is.character))` to `rec_base` as a safety net for stale processed parquet. Regenerate parquets with `make data`.
+- **What I used:** MEPS Stata string columns vs `haven_labelled` coercion.
+- **Verification:** N/A.
+
+---
+
+## 2026-05-03 — README: note character column drop in data cleaning
+
+- **Tool:** Cursor Agent
+- **Prompt:** Add a sentence to the data cleaning section about dropping character variables.
+- **Output summary:** Extended the first sentence of the Data cleaning section in [`README.md`](README.md) to mention dropping plain character-type columns (string identifiers like `DUPERSID`, `FAMID*`, `HIEUIDX`).
+- **What I used:** N/A.
+- **Verification:** N/A.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

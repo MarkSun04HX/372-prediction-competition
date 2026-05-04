@@ -43,7 +43,7 @@ slurm/
 
 ## Data cleaning
 
-Five MEPS FYC panels (2019–2023) are pooled across years. Year-suffixed names (e.g. `AGE23X`) are harmonized to a common stem (`AGEX`), producing ~1,512 predictors after dropping Section 2.5.11 expenditure/utilization columns and survey design weights.
+Five MEPS FYC panels (2019–2023) are pooled across years. Year-suffixed names (e.g. `AGE23X`) are harmonized to a common stem (`AGEX`), producing ~1,512 predictors after dropping Section 2.5.11 expenditure/utilization columns, survey design weights, and all plain character-type columns (string identifiers such as `DUPERSID`, `FAMID*`, `HIEUIDX` that carry no numeric predictive information).
 
 **Sentinel recoding is a critical preprocessing step.** MEPS uses numeric codes (`-1/-7/-8/-9/-15`) for non-response. Keeping them as raw integers would corrupt ordinal variables — e.g. `-1 = inapplicable` would sit below `1 = excellent` on a health scale, creating a false numeric ordering that invalidates treating categories as ordered. All five sentinel codes are therefore unified to `NA` first, then recoded to `max_code + 1` — a value clearly outside the valid range that models can learn as a distinct "missing" state. This is what makes it valid to leave the ~1,345 ordinal and binary categoricals as plain integers without one-hot encoding: their numeric order is meaningful once negatives are removed.
 

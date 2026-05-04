@@ -7,8 +7,7 @@
 #           outputs/cv/{best_model}/cv_full.rds (produced by 04_model-comparison.R)
 #
 # Outputs:
-#   models/{best_model}/            — fitted model object(s), type-specific files
-#   models/current/                 — copy of whichever directory above ran (fixed path for loaders)
+#   models/{best_model}/            — fitted model object(s)
 #   models/best_model_info.csv      — best model label, RMSLE, and hyperparameters
 #
 # Usage:
@@ -314,21 +313,6 @@ info_path <- file.path(root, "models", "best_model_info.csv")
 dir.create(dirname(info_path), showWarnings = FALSE, recursive = TRUE)
 write.csv(info_df, info_path, row.names = FALSE)
 message("Saved: ", info_path)
-
-# Stable path in repo regardless of winner: mirror models/{best_label}/ contents.
-current_dir <- file.path(root, "models", "current")
-if (dir.exists(current_dir))
-  unlink(current_dir, recursive = TRUE, force = TRUE)
-dir.create(current_dir, recursive = TRUE, showWarnings = FALSE)
-
-for (fname in list.files(out_model_dir)) {
-  from_f <- file.path(out_model_dir, fname)
-  to_f   <- file.path(current_dir, fname)
-  if (!file.copy(from_f, to_f, overwrite = TRUE))
-    stop("Failed to copy to models/current/: ", fname)
-}
-
-message("\nCopied best artifacts to stable path:\n  ", current_dir)
 
 message("\nDone. Best model (", best_label, ", RMSLE=",
         round(best_rmsle, 5), ") saved to models/", best_label, "/")

@@ -2,6 +2,7 @@
 # 01_clean-data.R
 # Read raw MEPS Stata files (2019-2023), drop excluded variables,
 # strip haven_labelled types, drop person identifiers (DUID/PID),
+# drop plain character columns (Stata string IDs / coded strings not numeric),
 # harmonize column names across years, pool into one dataset,
 # and write a single Parquet file for modeling.
 #
@@ -70,6 +71,17 @@ for (i in seq_len(nrow(year_map))) {
 
   # Drop person identifiers — not predictors
   df <- df[, setdiff(names(df), c("DUID", "PID")), drop = FALSE]
+
+  # Drop any remaining plain character columns (Stata string vars: identifiers,
+  # family IDs, coded strings not coerced by zap_labels above).
+  char_cols <- names(df)[vapply(df, is.character, logical(1L))]
+  if (length(char_cols)) {
+    df <- df[, setdiff(names(df), char_cols), drop = FALSE]
+    message(
+      "  Dropped ", length(char_cols), " character column(s): ",
+      paste(head(char_cols, 10), collapse = ", ")
+    )
+  }
 
   df <- meps_harmonize_names(df, yy)
   if (!"TOTEXP" %in% names(df)) stop("TOTEXP missing after harmonization for year ", yr)

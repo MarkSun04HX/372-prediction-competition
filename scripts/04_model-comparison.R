@@ -103,6 +103,7 @@ cv_folds <- rsample::vfold_cv(df, v = N_FOLDS, strata = "TOTEXP_LOG1P")
 
 rec_base <- recipes::recipe(TOTEXP_LOG1P ~ ., data = df) %>%
   recipes::step_rm(TOTEXP) %>%
+  recipes::step_rm(where(is.character)) %>%
   recipes::step_zv(recipes::all_predictors())
 
 rec_linear <- rec_base %>%
