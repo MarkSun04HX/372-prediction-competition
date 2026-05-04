@@ -655,6 +655,16 @@
 
 ---
 
+## 2026-05-04 — Add prediction script `08_predict_test.R` + Makefile targets
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) “Write 08: prediction task using model stored in `models/<best_label>/` and predict on `test.xlsx` after harmonization in 07.”
+- **Output summary:** Implemented `scripts/08_predict_test.R` to load the winning model (from `models/best_model_info.csv` or env override), read harmonized test features (from `07_prepare_test_for_prediction.R` output), align columns to training, and write prediction CSV + manifest. Added Makefile targets `predict` and `predict-local` (07 then 08).
+- **What I used:** Tidymodels workflow prediction for single-stage models; special-case logic for two-part hurdle artifacts; column alignment against the training processed parquet.
+- **Verification:** Parse-check via `Rscript -e 'parse(...)'` (syntax OK).
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
