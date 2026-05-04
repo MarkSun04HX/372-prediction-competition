@@ -645,6 +645,16 @@
 
 ---
 
+## 2026-05-04 — Repo sync: `git pull` with local edits (stash + conflict resolution)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) “Pull all changes made on the repo.”
+- **Output summary:** `git pull` initially failed because `scripts/03_process-data.R` had local changes. Stashed the file, pulled (fast-forward), then re-applied changes and resolved a merge conflict in `scripts/03_process-data.R` by keeping upstream structure while retaining a guard function (`assert_no_year_suffix_duplicates`). Dropped the temporary stash after manual resolution.
+- **What I used:** `git stash push`, `git pull`, manual conflict resolution, `git add`, and cleanup of the stash entry.
+- **Verification:** Verified no conflict markers remained; repo up-to-date with `origin/main` after pull.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
