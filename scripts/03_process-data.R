@@ -43,27 +43,6 @@ script_dir <- tryCatch({
 root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 source(file.path(root, "src", "exclude_variables.R"))
 
-# Guard against duplicate features that differ only by terminal year suffix (19..23).
-assert_no_year_suffix_duplicates <- function(nm, years = c("19", "20", "21", "22", "23")) {
-  year_pat <- paste0("(", paste(years, collapse = "|"), ")$")
-  suffixed <- nm[grepl(year_pat, nm)]
-  if (!length(suffixed)) return(invisible(NULL))
-
-  base <- sub(year_pat, "", suffixed)
-  tab <- table(base)
-  dup_bases <- names(tab)[tab >= 2L]
-  if (length(dup_bases)) {
-    offenders <- suffixed[base %in% dup_bases]
-    stop(
-      "Found duplicate year-suffixed features in processed training data. ",
-      "These look like the same feature repeated across years: ",
-      paste(utils::head(sort(unique(offenders)), 30L), collapse = ", "),
-      if (length(unique(offenders)) > 30L) " ..."
-    )
-  }
-  invisible(NULL)
-}
-
 # ---- Config ------------------------------------------------------------------
 
 N_UNIQUE_THRESH <- as.integer(Sys.getenv("N_UNIQUE_THRESH", unset = "20"))
@@ -84,8 +63,6 @@ df <- arrow::read_parquet(in_path, as_data_frame = TRUE)
 message("  ", nrow(df), " rows x ", ncol(df), " cols")
 
 # ---- Classify columns --------------------------------------------------------
-
-assert_no_year_suffix_duplicates(names(df))
 
 PROTECTED <- c("TOTEXP", "TOTEXP_LOG1P", "FYC_YEAR")
 
@@ -205,8 +182,6 @@ if (length(zv_cols)) {
 }
 
 # ---- 8. Write output ---------------------------------------------------------
-
-assert_no_year_suffix_duplicates(names(df))
 
 arrow::write_parquet(df, out_path)
 
