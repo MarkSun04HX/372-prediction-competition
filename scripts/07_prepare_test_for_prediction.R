@@ -27,13 +27,46 @@ suppressPackageStartupMessages({
   library(readxl)
 })
 
-script_dir <- tryCatch({
+resolve_repo_root <- function() {
   cmd <- commandArgs(trailingOnly = FALSE)
-  fn  <- sub("^--file=", "", cmd[grep("^--file=", cmd)])
-  normalizePath(dirname(fn), winslash = "/", mustWork = TRUE)
-}, error = function(e) ".")
+  file_flags <- grep("^--file=", cmd, value = TRUE)
 
-root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
+  script_path <- NULL
+  if (length(file_flags)) {
+    cand <- normalizePath(sub("^--file=", "", file_flags[length(file_flags)]),
+                          winslash = "/", mustWork = FALSE)
+    if (!anyNA(cand) && nzchar(cand) && cand != "-" && file.exists(cand))
+      script_path <- cand
+  }
+
+  from_script_parent <- NULL
+  if (!is.null(script_path)) {
+    from_script_parent <- normalizePath(file.path(dirname(script_path), ".."),
+                                        winslash = "/", mustWork = TRUE)
+    if (file.exists(file.path(from_script_parent, "src", "exclude_variables.R")))
+      return(from_script_parent)
+  }
+
+  d <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+  for (kk in seq_len(12L)) {
+    if (file.exists(file.path(d, "src", "exclude_variables.R"))) {
+      return(normalizePath(d, winslash = "/", mustWork = TRUE))
+    }
+    nd <- dirname(d)
+    if (identical(nd, d))
+      break
+    d <- nd
+  }
+
+  stop(
+    "Cannot resolve repo root (need src/exclude_variables.R).\n",
+    "Run from repo root:\n",
+    "  Rscript scripts/07_prepare_test_for_prediction.R\n",
+    "Or set working directory so an ancestor folder contains ", encodeString("src/exclude_variables.R"), "."
+  )
+}
+
+root <- resolve_repo_root()
 source(file.path(root, "src", "exclude_variables.R"))
 
 TEST_XLSX <- Sys.getenv("TEST_XLSX", unset = file.path(root, "test.xlsx"))
