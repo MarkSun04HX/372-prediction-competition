@@ -685,6 +685,16 @@
 
 ---
 
+## 2026-05-04 — Debug `make evaluate`: missing `FYC_YEAR`, constant nominal levels, and row-dropping `model.matrix`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Fix `make evaluate` failures shown in terminal output.
+- **Output summary:** Addressed three runtime blockers on a small (10-row) `test.xlsx`: (1) when `FYC_YEAR` was missing and the sheet already had harmonized `TOTEXP`, added a fallback to fill `FYC_YEAR` (via env `TEST_FYC_YEAR` or training median year); (2) avoided `model.matrix` contrast errors when a nominal had only one observed level in the test sample; (3) fixed `model.matrix` dropping rows (e.g. 10 vs 8) by replacing it with a row-stable dummy builder (`.one_hot_training_levels()`), mapping NA/unknown codes to all-zero rows and preserving `nrow`.
+- **What I used:** Knowledge of `model.matrix` behavior with missing values / factor levels; training-derived nominal levels; explicit dummy matrix construction to keep row counts consistent.
+- **Verification:** User reran `make evaluate` and the script completed, writing `data/processed/test_xlsx_processed.parquet`.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
