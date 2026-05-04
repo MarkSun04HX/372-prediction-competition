@@ -98,16 +98,17 @@ if (!is_two_part) {
 
 # ---- Helpers for two-part models ---------------------------------------------
 
+# gamma (loss_reduction) and lambda are fixed at XGBoost defaults — not tuned.
 .xgb_tidy_to_native <- function(best, p_count) {
   list(
-    nrounds          = max(1L,  as.integer(best$trees)),
+    nrounds          = min(500L, max(1L, as.integer(best$trees))),
     max_depth        = max(1L,  as.integer(best$tree_depth)),
     eta              = best$learn_rate,
     min_child_weight = max(1,   as.numeric(best$min_n)),
-    gamma            = max(0,   best$loss_reduction),
+    gamma            = 0.0,
     subsample        = min(1,   max(0.1, best$sample_size)),
     colsample_bytree = min(1,   max(0.1, best$mtry / p_count)),
-    lambda           = if ("lambda" %in% names(best)) max(0, best$lambda) else 1.0
+    lambda           = 1.0
   )
 }
 
@@ -137,28 +138,16 @@ if (!is_two_part) {
       parsnip::set_engine("ranger", seed = SEED) %>%
       parsnip::set_mode("regression"),
 
-    "xgboost" = {
-      eng_args <- list(
-        objective = "reg:squarederror",
-        nthread   = 1L
-      )
-      if ("lambda" %in% names(best_params)) eng_args$lambda <- best_params$lambda
-      do.call(
-        parsnip::set_engine,
-        c(list(
-          parsnip::boost_tree(
-            trees          = best_params$trees,
-            learn_rate     = best_params$learn_rate,
-            tree_depth     = best_params$tree_depth,
-            min_n          = best_params$min_n,
-            loss_reduction = best_params$loss_reduction,
-            sample_size    = best_params$sample_size,
-            mtry           = best_params$mtry
-          ),
-          "xgboost"
-        ), eng_args)
-      ) %>% parsnip::set_mode("regression")
-    },
+    "xgboost" = parsnip::boost_tree(
+        trees       = best_params$trees,
+        learn_rate  = best_params$learn_rate,
+        tree_depth  = best_params$tree_depth,
+        min_n       = best_params$min_n,
+        sample_size = best_params$sample_size,
+        mtry        = best_params$mtry
+      ) %>%
+      parsnip::set_engine("xgboost", nthread = 1L) %>%
+      parsnip::set_mode("regression"),
 
     "lightgbm" = parsnip::boost_tree(
         trees          = best_params$trees,

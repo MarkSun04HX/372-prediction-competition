@@ -611,6 +611,26 @@
 
 ---
 
+## 2026-05-04 — CV bug fixes: stop_iter placement, RF mtry, 06 stale XGB spec
+
+- **Tool:** Cursor Agent
+- **Prompt:** Fix XGBoost "unrecognized parameter stop_iter" warning, LightGBM "early_stopping_rounds is a banned alias" error, RF 11+ hour run due to oversized mtry grid, and stale XGBoost references in 06_train_best.R.
+- **Output summary:** [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R): moved `stop_iter=15L` from `set_engine()` into `boost_tree()` for XGBoost; replaced `early_stopping_rounds=20L` in `set_engine()` with `stop_iter=20L` in `boost_tree()` for LightGBM; replaced fraction-of-p RF mtry grid (`p×c(0.01,0.05,0.15,0.30)` → max 360) with sqrt(p)-relative values (`sqrt_p×c(0.5,1.0,2.0,3.0)` → max ~105). [`scripts/06_train_best.R`](scripts/06_train_best.R): fixed `.xgb_tidy_to_native` to use `gamma=0.0`, `lambda=1.0`, and `nrounds` capped at 500; simplified `spec_final` XGBoost block to remove `loss_reduction` and lambda conditional.
+- **What I used:** parsnip documentation on `boost_tree()` vs `set_engine()` argument placement; RF mtry scaling literature for high-dimensional data.
+- **Verification:** Read relevant sections before and after each edit to confirm correctness.
+
+---
+
+## 2026-05-04 — Conservative tree CV speedup + two-part XGB early stopping
+
+- **Tool:** Cursor Agent
+- **Prompt:** Review tree CV runtime pain points and implement the conservative plan: shrink boosting search space, add fold-internal validation early stopping for two-part RF+XGB stage 2, keep sequential single-core behavior, and define runtime validation targets.
+- **Output summary:** Updated [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R): added conservative grid reductions (`xgboost` LHS size `30 -> 20`, `lightgbm` `50 -> 30`), introduced `TP_XGB_VALID_FRAC` and `TP_XGB_EARLY_STOP_ROUNDS` config env vars, and replaced fixed-round-only stage-2 XGBoost training in two-part CV with fold-internal validation early stopping (`watchlist`, `early_stopping_rounds`, deterministic fold-level split, RMSE eval metric). Added [`scripts/07_benchmark_tree_cv_runtime.sh`](scripts/07_benchmark_tree_cv_runtime.sh) to benchmark MODEL_INDEX `5`, `6`, and `8` and write `outputs/benchmarks/<tag>/runtime_cv_summary.csv`. Kept sequential/single-thread design intact (`N_CORES=1` behavior unchanged).
+- **What I used:** Existing CV architecture in `04_model-comparison.R`, XGBoost early stopping behavior on `log1p` target (RMSE on log scale equivalent to RMSLE), conservative hyperparameter-space reduction strategy.
+- **Verification:** Parsed updated script with `Rscript -e "parse(file='scripts/04_model-comparison.R')"` (success). Checked lints; only pre-existing NSE-style warnings remain.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

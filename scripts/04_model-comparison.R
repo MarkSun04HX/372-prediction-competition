@@ -50,6 +50,8 @@ root <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TR
 
 SEED    <- as.integer(Sys.getenv("SEED",    unset = "42"))
 N_FOLDS <- as.integer(Sys.getenv("N_FOLDS", unset = "5"))
+TP_XGB_VALID_FRAC <- as.numeric(Sys.getenv("TP_XGB_VALID_FRAC", unset = "0.10"))
+TP_XGB_EARLY_STOP_ROUNDS <- as.integer(Sys.getenv("TP_XGB_EARLY_STOP_ROUNDS", unset = "20"))
 
 .slurm_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = NA)))
 if (is.na(.slurm_cores))
@@ -80,6 +82,8 @@ if (single_model && (is.na(MID) || MID < 1L || MID > N_MODELS)) {
 set.seed(SEED)
 message(
   "Config: seed=", SEED, "  cores=", N_CORES, "  folds=", N_FOLDS,
+  "  tp_xgb_valid_frac=", round(TP_XGB_VALID_FRAC, 3),
+  "  tp_xgb_stop=", TP_XGB_EARLY_STOP_ROUNDS,
   if (single_model) paste0("  model=", MODEL_LABELS[MID], " (", MID, ")") else "  model=ALL"
 )
 
@@ -153,12 +157,10 @@ spec_xgb <- parsnip::boost_tree(
     tree_depth  = tune(),
     min_n       = tune(),
     sample_size = tune(),
-    mtry        = tune()
+    mtry        = tune(),
+    stop_iter   = 15L           # halt after 15 rounds of no improvement
   ) %>%
-  parsnip::set_engine("xgboost",
-    nthread   = THREADS_PER_MODEL,
-    stop_iter = 15L             # halt after 15 rounds of no improvement
-  ) %>%
+  parsnip::set_engine("xgboost", nthread = THREADS_PER_MODEL) %>%
   parsnip::set_mode("regression")
 
 spec_lgbm <- parsnip::boost_tree(
@@ -168,12 +170,10 @@ spec_lgbm <- parsnip::boost_tree(
     min_n          = tune(),
     loss_reduction = tune(),
     sample_size    = tune(),
-    mtry           = tune()
+    mtry           = tune(),
+    stop_iter      = 20L        # halt after 20 rounds of no improvement
   ) %>%
-  parsnip::set_engine("lightgbm",
-    num_threads           = THREADS_PER_MODEL,
-    early_stopping_rounds = 20L
-  ) %>%
+  parsnip::set_engine("lightgbm", num_threads = THREADS_PER_MODEL) %>%
   parsnip::set_mode("regression")
 
 # ---- Workflows ---------------------------------------------------------------
@@ -195,7 +195,8 @@ grid_enet <- tidyr::expand_grid(
   mixture = c(0.1, 0.25, 0.5, 0.75, 0.9)
 )
 
-mtry_vals <- unique(pmax(1L, round(p * c(0.01, 0.05, 0.15, 0.30))))
+sqrt_p    <- max(1L, floor(sqrt(p)))
+mtry_vals <- unique(pmax(1L, round(sqrt_p * c(0.5, 1.0, 2.0, 3.0))))
 grid_rf <- tidyr::expand_grid(mtry = mtry_vals, min_n = c(5L, 20L))
 
 # learn_rate constrained to [0.01, 0.3] to avoid ultra-slow low-LR candidates.
@@ -214,11 +215,11 @@ grid_xgb  <- NULL
 grid_lgbm <- NULL
 if (!single_model || MID == 5L) {
   message("Building XGBoost grid ...")
-  grid_xgb <- make_boost_grid(wf_xgb, p, size = 30L)
+  grid_xgb <- make_boost_grid(wf_xgb, p, size = 20L)
 }
 if (!single_model || MID == 6L) {
   message("Building LightGBM grid ...")
-  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 50L)
+  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 30L)
 }
 
 # ---- Parallel backend --------------------------------------------------------
@@ -331,24 +332,50 @@ future::plan(future::sequential)  # release parallel workers
       predict(fit, data = X_test)$predictions
 
     } else if (s2_type == "xgb") {
-      dtrain <- xgboost::xgb.DMatrix(X_nz, label = y_nz)
       dtest  <- xgboost::xgb.DMatrix(X_test)
-      fit <- xgboost::xgb.train(
-        params = list(
-          objective        = "reg:squarederror",
-          nthread          = 1L,
-          max_depth        = s2_params$max_depth,
-          eta              = s2_params$eta,
-          min_child_weight = s2_params$min_child_weight,
-          gamma            = s2_params$gamma,
-          subsample        = s2_params$subsample,
-          colsample_bytree = s2_params$colsample_bytree,
-          lambda           = s2_params$lambda
-        ),
-        data    = dtrain,
-        nrounds = s2_params$nrounds,
-        verbose = 0
+      n_nz <- nrow(X_nz)
+      valid_frac <- min(0.40, max(0.05, TP_XGB_VALID_FRAC))
+      val_n <- max(1L, as.integer(floor(n_nz * valid_frac)))
+      can_early_stop <- (n_nz >= 40L) && ((n_nz - val_n) >= 20L)
+      params <- list(
+        objective        = "reg:squarederror",
+        eval_metric      = "rmse",
+        nthread          = 1L,
+        seed             = as.integer(seed + i),
+        max_depth        = s2_params$max_depth,
+        eta              = s2_params$eta,
+        min_child_weight = s2_params$min_child_weight,
+        gamma            = s2_params$gamma,
+        subsample        = s2_params$subsample,
+        colsample_bytree = s2_params$colsample_bytree,
+        lambda           = s2_params$lambda
       )
+
+      if (can_early_stop) {
+        set.seed(seed + i)
+        idx <- sample.int(n_nz)
+        val_idx <- idx[seq_len(val_n)]
+        tr_idx  <- idx[(val_n + 1L):n_nz]
+        dsubtrain <- xgboost::xgb.DMatrix(X_nz[tr_idx, , drop = FALSE], label = y_nz[tr_idx])
+        dvalid    <- xgboost::xgb.DMatrix(X_nz[val_idx, , drop = FALSE], label = y_nz[val_idx])
+        fit <- xgboost::xgb.train(
+          params = params,
+          data = dsubtrain,
+          nrounds = s2_params$nrounds,
+          watchlist = list(train = dsubtrain, eval = dvalid),
+          early_stopping_rounds = TP_XGB_EARLY_STOP_ROUNDS,
+          maximize = FALSE,
+          verbose = 0
+        )
+      } else {
+        dtrain <- xgboost::xgb.DMatrix(X_nz, label = y_nz)
+        fit <- xgboost::xgb.train(
+          params = params,
+          data = dtrain,
+          nrounds = s2_params$nrounds,
+          verbose = 0
+        )
+      }
       predict(fit, dtest)
 
     } else {
