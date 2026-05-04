@@ -665,6 +665,16 @@
 
 ---
 
+## 2026-05-04 — Update 08 to compute RMSLE vs `test.xlsx` (when labels exist)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) “Output should be the RMSLE computed w.r.t. `test.xlsx`… pipeline should run smoothly once model exists.”
+- **Output summary:** Updated `08_predict_test.R` to read actual `TOTEXP` from `test.xlsx` (direct `TOTEXP` column or via harmonization using 07’s manifest year suffix when present) and compute RMSLE as RMSE on the `log1p(TOTEXP)` scale. Writes `outputs/predictions/test_rmsle.json` plus per-row prediction CSV.
+- **What I used:** Relationship that RMSE on `log1p(TOTEXP)` equals RMSLE on the dollar scale; harmonization helper `meps_harmonize_names`.
+- **Verification:** Parse-check success; runtime verification deferred until a trained model exists and `test.xlsx` contains usable labels.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
