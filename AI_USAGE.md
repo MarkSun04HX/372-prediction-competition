@@ -695,6 +695,16 @@
 
 ---
 
+## 2026-05-04 — AI usage logging: commit/push only `AI_USAGE.md`
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) “Record all our interactions in this chat to `AI_USAGE.md`, and only commit and push changes in `AI_USAGE.md`… do not commit scripts.”
+- **Output summary:** Appended the session log to `AI_USAGE.md`, staged and committed **only** `AI_USAGE.md`, then pushed to `origin/main` (handling a non-fast-forward by stashing unrelated local changes, rebasing onto remote, pushing, and restoring the stash).
+- **What I used:** Git staging discipline (add/commit only `AI_USAGE.md`), `git pull --rebase`, and pushing without force.
+- **Verification:** `git push` succeeded and local non-AI_USAGE changes remained uncommitted.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
