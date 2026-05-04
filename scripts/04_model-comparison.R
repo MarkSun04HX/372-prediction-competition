@@ -128,13 +128,6 @@ message(
   "Sequential folds: ", N_CORES <= 1L, "  |  Threads per model fit: ", THREADS_PER_MODEL
 )
 
-# ---- XGB L2 regularization dials parameter -----------------------------------
-# XGBoost's lambda (L2 penalty on leaf weights, default=1) can be tuned.
-# We use dials::penalty (log10 scale) as a proxy for the [-3,1] log10 range
-# (0.001 to 10), which covers from light to strong regularization.
-
-.xgb_lambda_param <- dials::penalty(range = c(-3, 1))
-
 # ---- Model specifications ----------------------------------------------------
 
 spec_ridge <- parsnip::linear_reg(penalty = tune(), mixture = 0) %>%
@@ -149,28 +142,27 @@ spec_enet <- parsnip::linear_reg(penalty = tune(), mixture = tune()) %>%
 spec_rf <- parsnip::rand_forest(
     mtry  = tune(),
     min_n = tune(),
-    trees = 500L
+    trees = 150L
   ) %>%
   parsnip::set_engine("ranger", num.threads = THREADS_PER_MODEL, seed = SEED) %>%
   parsnip::set_mode("regression")
 
 spec_xgb <- parsnip::boost_tree(
-    trees          = tune(),
-    learn_rate     = tune(),
-    tree_depth     = tune(),
-    min_n          = tune(),
-    loss_reduction = tune(),
-    sample_size    = tune(),
-    mtry           = tune()
+    trees       = 1000L,        # fixed cap; early stopping halts before this
+    learn_rate  = tune(),
+    tree_depth  = tune(),
+    min_n       = tune(),
+    sample_size = tune(),
+    mtry        = tune()
   ) %>%
   parsnip::set_engine("xgboost",
-    nthread = THREADS_PER_MODEL,
-    lambda  = tune()           # L2 regularization; tuned via grid_latin_hypercube
+    nthread   = THREADS_PER_MODEL,
+    stop_iter = 15L             # halt after 15 rounds of no improvement
   ) %>%
   parsnip::set_mode("regression")
 
 spec_lgbm <- parsnip::boost_tree(
-    trees          = tune(),
+    trees          = 1000L,     # fixed cap; early stopping halts before this
     learn_rate     = tune(),
     tree_depth     = tune(),
     min_n          = tune(),
@@ -178,7 +170,10 @@ spec_lgbm <- parsnip::boost_tree(
     sample_size    = tune(),
     mtry           = tune()
   ) %>%
-  parsnip::set_engine("lightgbm", num_threads = THREADS_PER_MODEL) %>%
+  parsnip::set_engine("lightgbm",
+    num_threads           = THREADS_PER_MODEL,
+    early_stopping_rounds = 20L
+  ) %>%
   parsnip::set_mode("regression")
 
 # ---- Workflows ---------------------------------------------------------------
@@ -196,22 +191,21 @@ grid_ridge <- tibble::tibble(penalty = 10^seq(-4, 4, length.out = 30))
 grid_lasso <- grid_ridge
 
 grid_enet <- tidyr::expand_grid(
-  penalty = 10^seq(-4, 2, length.out = 20),
+  penalty = 10^seq(-4, 2, length.out = 10),
   mixture = c(0.1, 0.25, 0.5, 0.75, 0.9)
 )
 
-mtry_vals <- unique(pmax(1L, round(p * c(0.01, 0.03, 0.07, 0.15, 0.30))))
-grid_rf <- tidyr::expand_grid(mtry = mtry_vals, min_n = c(2L, 5L, 10L, 20L))
+mtry_vals <- unique(pmax(1L, round(p * c(0.01, 0.05, 0.15, 0.30))))
+grid_rf <- tidyr::expand_grid(mtry = mtry_vals, min_n = c(5L, 20L))
 
-# For XGBoost: Latin hypercube including lambda.
-# For LightGBM: Latin hypercube without lambda (not in spec).
-make_boost_grid <- function(wf, p_count, size = 150L, include_lambda = FALSE) {
+# learn_rate constrained to [0.01, 0.3] to avoid ultra-slow low-LR candidates.
+make_boost_grid <- function(wf, p_count, size = 150L) {
   param_set <- hardhat::extract_parameter_set_dials(wf)
   updates <- list(
-    mtry = dials::mtry(range = c(max(1L, round(p_count * 0.05)),
-                                  round(p_count * 0.80)))
+    mtry       = dials::mtry(range = c(max(1L, round(p_count * 0.05)),
+                                        round(p_count * 0.80))),
+    learn_rate = dials::learn_rate(range = c(-2, log10(0.3)))  # 0.01 to 0.30
   )
-  if (include_lambda) updates$lambda <- .xgb_lambda_param
   param_set <- do.call(update, c(list(param_set), updates))
   dials::grid_latin_hypercube(param_set, size = size)
 }
@@ -219,12 +213,12 @@ make_boost_grid <- function(wf, p_count, size = 150L, include_lambda = FALSE) {
 grid_xgb  <- NULL
 grid_lgbm <- NULL
 if (!single_model || MID == 5L) {
-  message("Building XGBoost grid (with lambda) ...")
-  grid_xgb <- make_boost_grid(wf_xgb, p, size = 150L, include_lambda = TRUE)
+  message("Building XGBoost grid ...")
+  grid_xgb <- make_boost_grid(wf_xgb, p, size = 30L)
 }
 if (!single_model || MID == 6L) {
   message("Building LightGBM grid ...")
-  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 150L, include_lambda = FALSE)
+  grid_lgbm <- make_boost_grid(wf_lgbm, p, size = 50L)
 }
 
 # ---- Parallel backend --------------------------------------------------------
@@ -381,23 +375,24 @@ future::plan(future::sequential)  # release parallel workers
   )
 }
 
-# Map tidymodels boost_tree param names → xgboost native API
+# Map tidymodels boost_tree param names → xgboost native API.
+# gamma (loss_reduction) and lambda are fixed at XGBoost defaults — not tuned.
 .xgb_tidy_to_native <- function(best, p_count) {
   list(
-    nrounds          = max(1L,  as.integer(best$trees)),
+    nrounds          = min(500L, max(1L, as.integer(best$trees))),
     max_depth        = max(1L,  as.integer(best$tree_depth)),
     eta              = best$learn_rate,
     min_child_weight = max(1,   as.numeric(best$min_n)),
-    gamma            = max(0,   best$loss_reduction),
+    gamma            = 0.0,
     subsample        = min(1,   max(0.1, best$sample_size)),
     colsample_bytree = min(1,   max(0.1, best$mtry / p_count)),
-    lambda           = if ("lambda" %in% names(best)) max(0, best$lambda) else 1.0
+    lambda           = 1.0
   )
 }
 
 # Stage-1 RF classifier: fixed hyperparameters
 .s1_params <- list(
-  trees        = 300L,
+  trees        = 200L,
   mtry         = max(1L, floor(sqrt(p))),
   min_node_size = 5L
 )

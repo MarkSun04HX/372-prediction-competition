@@ -601,6 +601,16 @@
 
 ---
 
+## 2026-05-03 — CV efficiency overhaul + ElasticNet OOM fix
+
+- **Tool:** Cursor Agent
+- **Prompt:** Fix ElasticNet OOM on HPC; reduce RF trees/grid for faster CV; aggressively cut XGB tuning (drop loss_reduction and lambda, constrain learn_rate, smaller grid, early stopping); cut LGBM similarly; reduce stage-1 RF trees.
+- **Output summary:** Updated [`slurm/submit_all_cv.sh`](slurm/submit_all_cv.sh) (ElasticNet 12G → 24G) and [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R): grid_enet 100→50; RF trees 500→150, grid 20→8 (4 mtry × 2 min_n); XGB dropped loss_reduction and lambda from tuning, fixed trees=1000, stop_iter=15, grid 150→30, learn_rate constrained to [0.01, 0.3]; LGBM fixed trees=1000, early_stopping_rounds=20, grid 150→50; stage-1 RF 300→200 trees; `.xgb_tidy_to_native` updated to use fixed gamma=0 and lambda=1 defaults.
+- **What I used:** Knowledge of XGBoost/LGBM hyperparameter sensitivity, typical grid sizes for Latin hypercube with early stopping, memory root-cause analysis for glmnet with multiple mixture values.
+- **Verification:** Read relevant sections of the script before and after edits to confirm correctness.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

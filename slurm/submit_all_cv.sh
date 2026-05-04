@@ -39,7 +39,7 @@ submit() {
 echo "Submitting single-stage model jobs (1-6) ..."
 J1=$(submit 12  meps-ridge   1)
 J2=$(submit 12  meps-lasso   2)
-J3=$(submit 12  meps-enet    3)
+J3=$(submit 24  meps-enet    3)
 J4=$(submit 32  meps-rf      4)
 J5=$(submit 20  meps-xgb     5)
 J6=$(submit 16  meps-lgbm    6)
