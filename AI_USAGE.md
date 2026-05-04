@@ -631,6 +631,20 @@
 
 ---
 
+## 2026-05-04 — Session: `git pull`, `08_predict_test`, `make evaluate`, `evaluate_test.R` design
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased sequence) Pull repo changes; add `08_predict_test.R` + Makefile `predict` targets using `models/<best>/model.rds`, harmonized test from 07, RMSLE vs `test.xlsx` when `TOTEXP` present; two commits + push (push skipped in environment); add `make evaluate` to clean `test.xlsx` like 01+03 without editing 01–06; clarify evaluate vs prediction; fix `make evaluate` failures (missing `FYC_YEAR`, `model.matrix` one-level contrasts, row mismatch 10 vs 8); align test columns to training pooled parquet and use training-derived continuous/categorical split + training nominal levels; replace `model.matrix` with `.one_hot_training_levels()`; use English-only messages in `evaluate_test.R`; explain nominal variables and 03 vs 07; log this chat in `AI_USAGE.md` and **commit/push only `AI_USAGE.md`** (do not commit scripts).
+- **Output summary:**
+  - **Pull:** Stashed local `03_process-data.R`, fast-forwarded `main`, reapplied stash; merged user’s `assert_no_year_suffix_duplicates` guard with upstream `03` layout.
+  - **`08_predict_test.R` + Makefile:** Loads best model from `models/best_model_info.csv` (or `BEST_MODEL`), reads `data/processed/test_for_prediction.parquet` (from 07), aligns predictors to training processed schema, supports single-stage workflows and two-part hurdle artifacts; writes `outputs/predictions/test_predictions.csv`, `test_rmsle.json`, manifest; inverse transform `expm1` for dollar-scale predictions; optional IDs from `test.xlsx`. Makefile: `predict`, `predict-local` (07 then 08).
+  - **`make evaluate` / `evaluate_test.R` (evolution):** Dropped separate `clean_test_xlsx_for_modeling.R` + env-hacked `03` approach per user request. Single **`scripts/evaluate_test.R`**: (1) **01-style** Excel path: exclusions, survey-design check, sentinels, `zap_labels`, drop **DUID/PID** only (match 01), drop character columns, harmonize when needed; (2) **requires** `meps_fyc_2019_2023_pooled_for_modeling.parquet`; (3) **align** test to exact training pooled column names/order (extra test columns dropped, missing filled with `NA`); (4) **03-style** processing with **continuous/categorical lists from training pooled `n_unique`**, not from small test; (5) nominal dummies via **`.one_hot_training_levels()`** — fixed **`nrow`**, training-sorted levels, first level = reference (all-zero row), NA/out-of-level → all zeros; avoids **`model.matrix`** dropping rows (10 vs 8) and avoids single-level **contrasts** errors; (6) **`zv_cols`** formula matches **03**; (7) **`FYC_YEAR`** fallbacks: `TEST_FYC_YEAR`, survey year from `yy`, else training median. All user-facing strings in **`evaluate_test.R`** switched to **English**. Makefile **`evaluate`**: runs `Rscript scripts/evaluate_test.R` only.
+  - **03 vs 07:** **`evaluate_test`** mirrors **01 + 03** (pooled → processed-style test artifact). **07** prepares rows against **processed predictor schema** for **08** prediction — different purpose.
+- **What I used:** `read_parquet`/`read_excel`, `meps_*` helpers from `src/exclude_variables.R`, training-first alignment to keep test processing comparable to production training pipeline; hand-built 0/1 dummies instead of `model.matrix` on heterogeneous factors.
+- **Verification:** User ran `make evaluate` successfully after fixes; Parquet `test_xlsx_processed.parquet` produced locally. Script/other repo edits **not** committed per this request.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
