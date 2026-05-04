@@ -675,6 +675,16 @@
 
 ---
 
+## 2026-05-04 — Add `make evaluate`: apply 01+03-style preprocessing to `test.xlsx` (no prediction)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) “Add `make evaluate` to clean `test.xlsx` with 01 and 03 processes; don’t change 01–06; no model available yet.”
+- **Output summary:** Created `scripts/evaluate_test.R` and Makefile `evaluate` target that runs it. The script cleans `test.xlsx` using the same *sequence* of steps as 01 then 03 (exclusions/sentinels/harmonization + encoding/NA handling + `TOTEXP_LOG1P`), producing a processed parquet for the test file without calling any model prediction.
+- **What I used:** `src/exclude_variables.R` helper functions and the 03 processing logic (nominal one-hot + NA-to-level recode + zv drop).
+- **Verification:** User ran `make evaluate` and iterated on errors until the parquet output was produced locally.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
