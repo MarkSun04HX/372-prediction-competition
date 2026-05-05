@@ -108,50 +108,82 @@ df <- meps_harmonize_names(df, yy)
 if (anyDuplicated(names(df))) df <- df[, !duplicated(names(df)), drop = FALSE]
 df$FYC_YEAR <- year_val
 
-# ---- 03-style steps ---------------------------------------------------------
+# ---- 03-style steps (encoding parameters derived from training data) ---------
+# All continuous/categorical splits, one-hot levels, and NA sentinels must come
+# from the pooled TRAINING parquet — not from the small test set — so that the
+# test encoding exactly matches what 03_process-data.R applied to training.
 PROTECTED <- c("TOTEXP", "TOTEXP_LOG1P", "FYC_YEAR")
-col_nuniq <- vapply(
-  setdiff(names(df), PROTECTED),
-  function(nm) length(unique(df[[nm]][!is.na(df[[nm]])])),
+
+pooled_path <- file.path(
+  root, "data", "processed",
+  "meps_fyc_2019_2023_pooled_for_modeling.parquet"
+)
+if (!file.exists(pooled_path))
+  stop("Pooled training parquet not found — run `make clean` first:\n  ", pooled_path)
+
+message("Reading pooled training parquet for encoding parameters ...")
+train_df <- as.data.frame(read_parquet(pooled_path, as_data_frame = TRUE))
+train_df <- meps_recode_sentinels(train_df)
+
+train_pred_cols <- setdiff(names(train_df), PROTECTED)
+col_nuniq_train <- vapply(
+  train_pred_cols,
+  function(nm) length(unique(train_df[[nm]][!is.na(train_df[[nm]])])),
   integer(1L)
 )
-continuous_cols <- names(col_nuniq)[col_nuniq > N_UNIQUE_THRESH]
-categorical_cols <- names(col_nuniq)[col_nuniq <= N_UNIQUE_THRESH]
+continuous_cols_train  <- names(col_nuniq_train)[col_nuniq_train >  N_UNIQUE_THRESH]
+categorical_cols_train <- names(col_nuniq_train)[col_nuniq_train <= N_UNIQUE_THRESH]
 
-cont_any_na <- continuous_cols[vapply(continuous_cols, function(nm) anyNA(df[[nm]]), logical(1L))]
-if (length(cont_any_na)) df <- df[, setdiff(names(df), cont_any_na), drop = FALSE]
+# Drop the same continuous-with-NA columns that 03_process-data.R dropped.
+cont_na_in_train <- continuous_cols_train[
+  vapply(continuous_cols_train,
+         function(nm) if (nm %in% names(train_df)) anyNA(train_df[[nm]]) else FALSE,
+         logical(1L))
+]
+if (length(cont_na_in_train)) {
+  df <- df[, setdiff(names(df), cont_na_in_train), drop = FALSE]
+  message("Dropped ", length(cont_na_in_train),
+          " continuous column(s) with NA in training (matching 03_process-data.R).")
+}
 
 df$TOTEXP_LOG1P <- log1p(as.numeric(df$TOTEXP))
 
-recode_na_to_new_level <- function(x) {
-  if (!anyNA(x)) return(x)
-  new_level <- max(x, na.rm = TRUE) + 1L
-  x[is.na(x)] <- new_level
-  x
-}
+# One-hot encode nominal variables using TRAINING levels so dummy column names
+# and the NA sentinel value exactly match the processed training parquet.
+nominal_present_train <- intersect(meps_nominal_vars(), categorical_cols_train)
+nominal_in_test       <- intersect(nominal_present_train, names(df))
 
-nominal_present <- intersect(meps_nominal_vars(), categorical_cols)
-if (length(nominal_present)) {
+if (length(nominal_in_test)) {
+  message("One-hot encoding ", length(nominal_in_test),
+          " nominal variable(s) using training levels ...")
   dummy_frames <- list()
-  for (nm in nominal_present) {
-    x <- recode_na_to_new_level(df[[nm]])
-    lvls <- sort(unique(x))
-    if (length(lvls) < 2L) next
-    fx <- factor(x, levels = lvls)
+  for (nm in nominal_in_test) {
+    if (!nm %in% names(train_df)) next
+    # Derive levels from training (includes NA-as-new-level sentinel)
+    train_lvls  <- sort(unique(recode_na_to_new_level(train_df[[nm]])))
+    na_sentinel <- train_lvls[length(train_lvls)]
+
+    x_test <- df[[nm]]
+    x_test[is.na(x_test)] <- na_sentinel      # same NA code as training
+    fx <- factor(x_test, levels = train_lvls) # unseen levels -> NA -> maps to ref
     mm <- model.matrix(~ fx - 1)
-    colnames(mm) <- paste0(nm, "_", lvls)
-    mm <- mm[, -1L, drop = FALSE]
+    colnames(mm) <- paste0(nm, "_", train_lvls)
+    if (ncol(mm) > 1L) mm <- mm[, -1L, drop = FALSE]  # drop reference level
     dummy_frames[[nm]] <- as.data.frame(mm, check.names = FALSE)
   }
-  df <- df[, setdiff(names(df), nominal_present), drop = FALSE]
+  df <- df[, setdiff(names(df), nominal_in_test), drop = FALSE]
   if (length(dummy_frames)) df <- cbind(df, do.call(cbind, dummy_frames))
 }
 
-remaining_cat <- intersect(categorical_cols, names(df))
-remaining_cat <- setdiff(remaining_cat, c(PROTECTED, nominal_present))
-cat_with_na <- remaining_cat[vapply(remaining_cat, function(nm) anyNA(df[[nm]]), logical(1L))]
-if (length(cat_with_na)) {
-  for (nm in cat_with_na) df[[nm]] <- recode_na_to_new_level(df[[nm]])
+# Recode NA in non-nominal categorical columns using the TRAINING max+1 sentinel
+# so missing values get the same integer code the model learned from.
+non_nominal_cat_train <- setdiff(categorical_cols_train, nominal_present_train)
+for (nm in non_nominal_cat_train) {
+  if (!nm %in% names(df)) next
+  if (!anyNA(df[[nm]])) next
+  if (!nm %in% names(train_df)) next
+  max_train <- max(train_df[[nm]], na.rm = TRUE)
+  df[[nm]][is.na(df[[nm]])] <- max_train + 1L
 }
 
 num_mask <- vapply(df, is.numeric, logical(1L))
