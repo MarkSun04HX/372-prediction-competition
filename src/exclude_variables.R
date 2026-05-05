@@ -186,3 +186,13 @@ meps_recode_sentinels <- function(df) {
   }
   df
 }
+
+#' Recode NA in a numeric vector to max(x) + 1, making missingness a distinct
+#' integer level that a tree-based model can learn from.  If x has no NA the
+#' vector is returned unchanged.
+recode_na_to_new_level <- function(x) {
+  if (!anyNA(x)) return(x)
+  new_level <- max(x, na.rm = TRUE) + 1L
+  x[is.na(x)] <- new_level
+  x
+}

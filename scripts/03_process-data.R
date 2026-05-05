@@ -98,15 +98,6 @@ if (!"TOTEXP" %in% names(df)) stop("TOTEXP column missing — check 01_clean-dat
 df$TOTEXP_LOG1P <- log1p(as.numeric(df$TOTEXP))
 message("Added TOTEXP_LOG1P = log1p(TOTEXP).")
 
-# ---- Helper: recode NA to max+1 for one column -------------------------------
-
-recode_na_to_new_level <- function(x) {
-  if (!anyNA(x)) return(x)
-  new_level <- max(x, na.rm = TRUE) + 1L
-  x[is.na(x)] <- new_level
-  x
-}
-
 # ---- 5. One-hot encode nominal variables -------------------------------------
 
 nominal_list <- meps_nominal_vars()
