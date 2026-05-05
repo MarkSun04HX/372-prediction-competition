@@ -160,7 +160,7 @@ if (nzchar(best_override)) {
 } else if (file.exists(info_path)) {
   info <- read.csv(info_path, stringsAsFactors = FALSE)
   best_label    <- info$best_model[1]
-  model_dir     <- info$model_dir[1]
+  model_dir     <- file.path(root, "models", best_label)
   is_two_part   <- if ("is_two_part" %in% names(info)) {
     v <- info$is_two_part[1]
     isTRUE(v) || identical(as.character(v), "TRUE")

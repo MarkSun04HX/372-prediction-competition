@@ -745,6 +745,16 @@
 
 ---
 
+## 2026-05-05 — Fix model_dir portability (08_evaluate.R + 06_train_best.R)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) `make evaluate` fails because `best_model_info.csv` has an absolute HPC path for `model_dir`; fix it so any machine with the repo works without re-running training.
+- **Output summary:** `scripts/08_evaluate.R`: replaced `model_dir <- info$model_dir[1]` with `model_dir <- file.path(root, "models", best_label)` so the stored CSV column is ignored and the path is always constructed from the repo root. `scripts/06_train_best.R`: changed `model_dir = out_model_dir` to `model_dir = file.path("models", best_label)` so future training runs write a relative path. No change to `models/best_model_info.csv` needed.
+- **What I used:** `scripts/08_evaluate.R`, `scripts/06_train_best.R`, `models/best_model_info.csv`.
+- **Verification:** Two-line surgical change; `make evaluate` can now resolve `models/xgboost/` on any machine.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

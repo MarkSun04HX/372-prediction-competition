@@ -295,7 +295,7 @@ info_df <- data.frame(
   best_model = best_label,
   cv_rmsle   = best_rmsle,
   is_two_part = is_two_part,
-  model_dir  = out_model_dir,
+  model_dir  = file.path("models", best_label),
   stringsAsFactors = FALSE
 )
 info_path <- file.path(root, "models", "best_model_info.csv")
