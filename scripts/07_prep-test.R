@@ -56,11 +56,11 @@ source(file.path(root, "src", "exclude_variables.R"))
 TEST_XLSX <- Sys.getenv("TEST_XLSX", unset = file.path(root, "test.xlsx"))
 OUT_PARQUET <- Sys.getenv(
   "OUT_PARQUET",
-  unset = file.path(root, "data", "processed", "test_for_prediction_processed.parquet")
+  unset = file.path(root, "data", "processed", "test_for_prediction.parquet")
 )
 OUT_CSV <- Sys.getenv(
   "OUT_CSV",
-  unset = file.path(root, "data", "processed", "test_for_prediction_processed.csv")
+  unset = file.path(root, "data", "processed", "test_for_prediction.csv")
 )
 FORCE_YEAR_YY <- Sys.getenv("FORCE_YEAR_YY", unset = "")
 N_UNIQUE_THRESH <- as.integer(Sys.getenv("N_UNIQUE_THRESH", unset = "20"))
