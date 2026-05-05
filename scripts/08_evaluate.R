@@ -184,7 +184,10 @@ message("Model dir: ", normalizePath(model_dir, winslash = "/", mustWork = TRUE)
 
 message("Reading training reference ", PROCESSED_PATH, " ...")
 train_df <- read_parquet(PROCESSED_PATH, as_data_frame = TRUE)
-pred_names_train <- setdiff(names(train_df), c("TOTEXP", "TOTEXP_LOG1P"))
+# The recipe uses `TOTEXP_LOG1P ~ .` + step_rm(TOTEXP), so hardhat's blueprint
+# requires TOTEXP to be present in new_data (it is removed inside the recipe,
+# before the model sees it).  Only exclude TOTEXP_LOG1P here.
+pred_names_train <- setdiff(names(train_df), "TOTEXP_LOG1P")
 
 message("Reading test ", TEST_PARQUET, " ...")
 test_df <- read_parquet(TEST_PARQUET, as_data_frame = TRUE)

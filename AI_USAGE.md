@@ -755,6 +755,16 @@
 
 ---
 
+## 2026-05-05 — Fix hardhat forge TOTEXP missing error
+
+- **Tool:** Cursor Agent
+- **Prompt:** Terminal output showing `Error in hardhat::forge(): The required column "TOTEXP" is missing` when running `make evaluate`.
+- **Output summary:** Identified that the XGBoost recipe is defined as `TOTEXP_LOG1P ~ .` with `step_rm(TOTEXP)`, which means hardhat records `TOTEXP` as a required input column (even though the recipe step removes it before the model sees it). `08_evaluate.R` was incorrectly pre-stripping `TOTEXP` from `pred_names_train`, so it never reached `predict()`. Fixed by only excluding `TOTEXP_LOG1P` from `pred_names_train`; `step_rm` inside the recipe handles the rest. `make evaluate` now runs cleanly and produces predictions.
+- **What I used:** Changed one line in `scripts/08_evaluate.R` — `setdiff(..., c("TOTEXP", "TOTEXP_LOG1P"))` → `setdiff(..., "TOTEXP_LOG1P")`.
+- **Verification:** `make evaluate` completed successfully; RMSLE 1.960 on 10-row toy test set, predictions written to `outputs/predictions/test_predictions.csv`.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
