@@ -705,6 +705,16 @@
 
 ---
 
+## 2026-05-04 — Two-part model bug fixes: nrounds=1 and NULL trees
+
+- **Tool:** Cursor Agent
+- **Prompt:** Fix nrounds=1 bug in XGBoost stage-2 (two_part_rf_xgb), fix NULL trees in spec_final for XGBoost/LightGBM in 06_train_best.R, sync stage-1 RF trees. Only model 8 needs rerun.
+- **Output summary:** [`scripts/04_model-comparison.R`](scripts/04_model-comparison.R): `.xgb_tidy_to_native` nrounds changed from `min(500L, max(1L, as.integer(best$trees)))` to `1000L` (since trees is fixed not tuned, best$trees is NULL → was collapsing to 1). [`scripts/06_train_best.R`](scripts/06_train_best.R): same `.xgb_tidy_to_native` fix; XGBoost and LightGBM `spec_final` `trees = best_params$trees` → `trees = 1000L`; `.s1_params` trees 300→200. Root cause: `trees = 1000L` fixed in spec means `select_best()` never returns it, so any reference to `best$trees` gets NULL.
+- **What I used:** Trace of `nrounds=1` warning in output + knowledge of how parsnip's select_best handles fixed vs tuned parameters.
+- **Verification:** Read both files before and after to confirm correctness.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

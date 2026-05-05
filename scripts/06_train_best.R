@@ -101,7 +101,7 @@ if (!is_two_part) {
 # gamma (loss_reduction) and lambda are fixed at XGBoost defaults — not tuned.
 .xgb_tidy_to_native <- function(best, p_count) {
   list(
-    nrounds          = min(500L, max(1L, as.integer(best$trees))),
+    nrounds          = 1000L,
     max_depth        = max(1L,  as.integer(best$tree_depth)),
     eta              = best$learn_rate,
     min_child_weight = max(1,   as.numeric(best$min_n)),
@@ -112,7 +112,7 @@ if (!is_two_part) {
   )
 }
 
-.s1_params <- list(trees = 300L, mtry = max(1L, floor(sqrt(p))), min_node_size = 5L)
+.s1_params <- list(trees = 200L, mtry = max(1L, floor(sqrt(p))), min_node_size = 5L)
 
 # ---- Fit best model on full dataset ------------------------------------------
 
@@ -139,7 +139,7 @@ if (!is_two_part) {
       parsnip::set_mode("regression"),
 
     "xgboost" = parsnip::boost_tree(
-        trees       = best_params$trees,
+        trees       = 1000L,
         learn_rate  = best_params$learn_rate,
         tree_depth  = best_params$tree_depth,
         min_n       = best_params$min_n,
@@ -150,7 +150,7 @@ if (!is_two_part) {
       parsnip::set_mode("regression"),
 
     "lightgbm" = parsnip::boost_tree(
-        trees          = best_params$trees,
+        trees          = 1000L,
         learn_rate     = best_params$learn_rate,
         tree_depth     = best_params$tree_depth,
         min_n          = best_params$min_n,

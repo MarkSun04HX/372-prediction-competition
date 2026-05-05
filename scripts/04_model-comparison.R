@@ -406,7 +406,7 @@ future::plan(future::sequential)  # release parallel workers
 # gamma (loss_reduction) and lambda are fixed at XGBoost defaults — not tuned.
 .xgb_tidy_to_native <- function(best, p_count) {
   list(
-    nrounds          = min(500L, max(1L, as.integer(best$trees))),
+    nrounds          = 1000L,
     max_depth        = max(1L,  as.integer(best$tree_depth)),
     eta              = best$learn_rate,
     min_child_weight = max(1,   as.numeric(best$min_n)),
