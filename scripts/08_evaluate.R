@@ -19,9 +19,7 @@
 #     test_for_prediction_manifest.json when present).
 #
 # Outputs:
-#   - outputs/predictions/test_rmsle.json     — RMSLE, n evaluated, metadata
-#   - outputs/predictions/test_predictions.csv — per-row predictions (optional QA)
-#   - outputs/predictions/test_predictions_manifest.json
+#   - outputs/predictions/test_predictions.csv — per-row predictions
 #
 # Usage:
 #   Rscript scripts/07_prep-test.R
@@ -33,7 +31,6 @@
 #   TEST_XLSX           default test.xlsx (labels + IDs)
 #   PROCESSED_PARQUET   training parquet for column alignment (default: processed path)
 #   OUT_PRED_CSV        default outputs/predictions/test_predictions.csv
-#   OUT_RMSLE_JSON      default outputs/predictions/test_rmsle.json
 #   TEST_FYC_YEAR       optional numeric year (e.g. 2022) if FYC_YEAR missing in test
 
 suppressPackageStartupMessages({
@@ -71,10 +68,6 @@ TEST_XLSX <- Sys.getenv("TEST_XLSX", unset = file.path(root, "test.xlsx"))
 OUT_PRED <- Sys.getenv(
   "OUT_PRED_CSV",
   unset = file.path(root, "outputs", "predictions", "test_predictions.csv")
-)
-OUT_RMSLE <- Sys.getenv(
-  "OUT_RMSLE_JSON",
-  unset = file.path(root, "outputs", "predictions", "test_rmsle.json")
 )
 
 .manifest_harmonize_yy <- function(test_parquet_path) {
@@ -346,43 +339,8 @@ if (!is.null(actual_col)) out_df$actual_totexp <- actual_col
 if (!is.null(id_out)) out_df$id <- id_out
 
 dir.create(dirname(OUT_PRED), recursive = TRUE, showWarnings = FALSE)
-dir.create(dirname(OUT_RMSLE), recursive = TRUE, showWarnings = FALSE)
 write.csv(out_df, OUT_PRED, row.names = FALSE)
 
-rmsle_json <- list(
-  metric = "rmsle",
-  definition = "sqrt(mean((predicted_log1p(TOTEXP) - log1p(actual_TOTEXP))^2))",
-  rmsle = rmsle_result$rmsle,
-  n_evaluated = rmsle_result$n_evaluated,
-  n_missing_actual = rmsle_result$n_missing_actual,
-  totexp_source = rmsle_result$totexp_source,
-  harmonize_yy_used_for_totexp = rmsle_result$harmonize_yy_used,
-  harmonize_yy_from_07_manifest = if (!is.na(yy_manifest) && nzchar(yy_manifest)) yy_manifest else NULL,
-  best_model = best_label,
-  test_xlsx = normalizePath(TEST_XLSX, winslash = "/", mustWork = FALSE),
-  test_parquet = normalizePath(TEST_PARQUET, winslash = "/", mustWork = TRUE)
-)
-jsonlite::write_json(rmsle_json, OUT_RMSLE, auto_unbox = TRUE, pretty = TRUE)
-
-manifest <- list(
-  best_model = best_label,
-  model_dir = normalizePath(model_dir, winslash = "/", mustWork = TRUE),
-  is_two_part = is_two_part,
-  test_parquet = normalizePath(TEST_PARQUET, winslash = "/", mustWork = TRUE),
-  test_xlsx = normalizePath(TEST_XLSX, winslash = "/", mustWork = FALSE),
-  processed_training_parquet = normalizePath(PROCESSED_PATH, winslash = "/", mustWork = TRUE),
-  n_rows = nrow(out_df),
-  rmsle = rmsle_result$rmsle,
-  n_evaluated_rmsle = rmsle_result$n_evaluated,
-  out_csv = normalizePath(OUT_PRED, winslash = "/", mustWork = FALSE),
-  out_rmsle_json = normalizePath(OUT_RMSLE, winslash = "/", mustWork = FALSE)
-)
-manifest_path <- sub("\\.csv$", "_manifest.json", OUT_PRED)
-if (manifest_path == OUT_PRED) manifest_path <- file.path(dirname(OUT_PRED), "test_predictions_manifest.json")
-jsonlite::write_json(manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE)
-
 message("\nDone.")
-message("  RMSLE:   ", OUT_RMSLE)
 message("  Wrote: ", OUT_PRED)
-message("  Wrote: ", manifest_path)
 message("  Rows:  ", nrow(out_df))
