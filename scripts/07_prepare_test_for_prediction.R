@@ -1,13 +1,10 @@
 #!/usr/bin/env Rscript
 # 07_prepare_test_for_prediction.R
-# Prepare test.xlsx into a harmonized, model-input-like table.
 #
-# Priority for feature reference (in order):
-#   1) data/processed/meps_fyc_2019_2023_pooled_for_modeling_processed.parquet
-#      -> exact predictor columns used by model training (best option)
-#   2) Union of harmonized columns derived from raw 2019-2023 files after
-#      01_clean-data.R style exclusion + ID dropping
-#      -> useful fallback when processed parquet does not exist yet
+# Prepare `test.xlsx` using the same transformation logic as training:
+#   - 01_clean-data.R style: sentinel recode, drop IDs/strings, harmonize names
+#   - 03_process-data.R style: one-hot nominal variables, recode categorical NA
+#     levels, drop zero-variance columns, add TOTEXP_LOG1P
 #
 # Usage:
 #   Rscript scripts/07_prepare_test_for_prediction.R
@@ -15,11 +12,10 @@
 # Env vars:
 #   TEST_XLSX      input xlsx path (default: test.xlsx)
 #   OUT_PARQUET    output parquet path
-#                  (default: data/processed/test_for_prediction.parquet)
-#   OUT_CSV        optional output csv path
-#                  (default: data/processed/test_for_prediction.csv)
+#                  (default: data/processed/test_for_prediction_processed.parquet)
+#   OUT_CSV        output csv path
+#                  (default: data/processed/test_for_prediction_processed.csv)
 #   FORCE_YEAR_YY  optional year suffix for harmonization: 19|20|21|22|23
-#                  If unset, script tries all and picks the best match.
 
 suppressPackageStartupMessages({
   library(arrow)
@@ -30,7 +26,6 @@ suppressPackageStartupMessages({
 resolve_repo_root <- function() {
   cmd <- commandArgs(trailingOnly = FALSE)
   file_flags <- grep("^--file=", cmd, value = TRUE)
-
   script_path <- NULL
   if (length(file_flags)) {
     cand <- normalizePath(sub("^--file=", "", file_flags[length(file_flags)]),
@@ -39,31 +34,20 @@ resolve_repo_root <- function() {
       script_path <- cand
   }
 
-  from_script_parent <- NULL
   if (!is.null(script_path)) {
-    from_script_parent <- normalizePath(file.path(dirname(script_path), ".."),
-                                        winslash = "/", mustWork = TRUE)
-    if (file.exists(file.path(from_script_parent, "src", "exclude_variables.R")))
-      return(from_script_parent)
+    parent <- normalizePath(file.path(dirname(script_path), ".."),
+                            winslash = "/", mustWork = TRUE)
+    if (file.exists(file.path(parent, "src", "exclude_variables.R"))) return(parent)
   }
 
   d <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   for (kk in seq_len(12L)) {
-    if (file.exists(file.path(d, "src", "exclude_variables.R"))) {
-      return(normalizePath(d, winslash = "/", mustWork = TRUE))
-    }
+    if (file.exists(file.path(d, "src", "exclude_variables.R"))) return(d)
     nd <- dirname(d)
-    if (identical(nd, d))
-      break
+    if (identical(nd, d)) break
     d <- nd
   }
-
-  stop(
-    "Cannot resolve repo root (need src/exclude_variables.R).\n",
-    "Run from repo root:\n",
-    "  Rscript scripts/07_prepare_test_for_prediction.R\n",
-    "Or set working directory so an ancestor folder contains ", encodeString("src/exclude_variables.R"), "."
-  )
+  stop("Cannot resolve repo root (need src/exclude_variables.R).")
 }
 
 root <- resolve_repo_root()
@@ -72,135 +56,131 @@ source(file.path(root, "src", "exclude_variables.R"))
 TEST_XLSX <- Sys.getenv("TEST_XLSX", unset = file.path(root, "test.xlsx"))
 OUT_PARQUET <- Sys.getenv(
   "OUT_PARQUET",
-  unset = file.path(root, "data", "processed", "test_for_prediction.parquet")
+  unset = file.path(root, "data", "processed", "test_for_prediction_processed.parquet")
 )
 OUT_CSV <- Sys.getenv(
   "OUT_CSV",
-  unset = file.path(root, "data", "processed", "test_for_prediction.csv")
+  unset = file.path(root, "data", "processed", "test_for_prediction_processed.csv")
 )
 FORCE_YEAR_YY <- Sys.getenv("FORCE_YEAR_YY", unset = "")
+N_UNIQUE_THRESH <- as.integer(Sys.getenv("N_UNIQUE_THRESH", unset = "20"))
 
-if (!file.exists(TEST_XLSX))
-  stop("Input file not found: ", TEST_XLSX)
+if (!file.exists(TEST_XLSX)) stop("Input file not found: ", TEST_XLSX)
 
-year_map <- data.frame(
-  year = c(2019L, 2020L, 2021L, 2022L, 2023L),
-  yy   = c("19", "20", "21", "22", "23"),
-  file = c("h216.dta", "h224.dta", "h233.dta", "h243.dta", "h251.dta"),
-  stringsAsFactors = FALSE
+manifest_path <- file.path(dirname(OUT_PARQUET), "test_for_prediction_manifest.json")
+manifest_yy <- NA_character_
+if (!nzchar(FORCE_YEAR_YY) && file.exists(manifest_path) &&
+    requireNamespace("jsonlite", quietly = TRUE)) {
+  man <- jsonlite::read_json(manifest_path, simplifyVector = TRUE)
+  manifest_yy <- as.character(man$harmonize_year_suffix_used)
+}
+
+yy <- FORCE_YEAR_YY
+if (!nzchar(yy) && !is.na(manifest_yy) && nzchar(manifest_yy)) yy <- manifest_yy
+if (!nzchar(yy)) yy <- "19"
+year_val <- as.integer(paste0("20", yy))
+
+message("Using harmonization yy=", yy, " (FYC_YEAR=", year_val, ")")
+
+df <- as.data.frame(read_excel(TEST_XLSX))
+orig_ncols <- ncol(df)
+
+if (!("TOTEXP" %in% names(df))) {
+  warning("TOTEXP not found in test.xlsx. Creating TOTEXP=NA.")
+  df$TOTEXP <- NA_real_
+}
+
+# ---- 01-style steps ---------------------------------------------------------
+exclusions <- meps_expanded_exclusion_names()
+df <- meps_recode_sentinels(df)
+df[] <- lapply(df, function(x) {
+  if (inherits(x, "labelled")) as.numeric(haven::zap_labels(x)) else x
+})
+df <- df[, setdiff(names(df), c("DUID", "PID")), drop = FALSE]
+
+char_cols <- names(df)[vapply(df, is.character, logical(1L))]
+if (length(char_cols)) df <- df[, setdiff(names(df), char_cols), drop = FALSE]
+
+to_drop <- setdiff(intersect(names(df), exclusions), "TOTEXP")
+if (length(to_drop)) df <- df[, setdiff(names(df), to_drop), drop = FALSE]
+
+df <- meps_harmonize_names(df, yy)
+if (anyDuplicated(names(df))) df <- df[, !duplicated(names(df)), drop = FALSE]
+df$FYC_YEAR <- year_val
+
+# ---- 03-style steps ---------------------------------------------------------
+PROTECTED <- c("TOTEXP", "TOTEXP_LOG1P", "FYC_YEAR")
+col_nuniq <- vapply(
+  setdiff(names(df), PROTECTED),
+  function(nm) length(unique(df[[nm]][!is.na(df[[nm]])])),
+  integer(1L)
 )
+continuous_cols <- names(col_nuniq)[col_nuniq > N_UNIQUE_THRESH]
+categorical_cols <- names(col_nuniq)[col_nuniq <= N_UNIQUE_THRESH]
 
-build_harmonized_union <- function(root_dir, ym) {
-  exclusions <- meps_expanded_exclusion_names()
-  out <- character(0)
-  for (i in seq_len(nrow(ym))) {
-    yy <- ym$yy[i]
-    path <- file.path(root_dir, "data", "raw", ym$file[i])
-    if (!file.exists(path)) next
-    df <- as.data.frame(read_dta(path))
+cont_any_na <- continuous_cols[vapply(continuous_cols, function(nm) anyNA(df[[nm]]), logical(1L))]
+if (length(cont_any_na)) df <- df[, setdiff(names(df), cont_any_na), drop = FALSE]
 
-    target_name <- paste0("TOTEXP", yy)
-    to_drop <- setdiff(intersect(names(df), exclusions), target_name)
-    df <- df[, setdiff(names(df), to_drop), drop = FALSE]
-    df <- df[, setdiff(names(df), c("DUID", "PID", "DUPERSID")), drop = FALSE]
-    df <- meps_harmonize_names(df, yy)
+df$TOTEXP_LOG1P <- log1p(as.numeric(df$TOTEXP))
 
-    out <- union(out, names(df))
+recode_na_to_new_level <- function(x) {
+  if (!anyNA(x)) return(x)
+  new_level <- max(x, na.rm = TRUE) + 1L
+  x[is.na(x)] <- new_level
+  x
+}
+
+nominal_present <- intersect(meps_nominal_vars(), categorical_cols)
+if (length(nominal_present)) {
+  dummy_frames <- list()
+  for (nm in nominal_present) {
+    x <- recode_na_to_new_level(df[[nm]])
+    lvls <- sort(unique(x))
+    if (length(lvls) < 2L) next
+    fx <- factor(x, levels = lvls)
+    mm <- model.matrix(~ fx - 1)
+    colnames(mm) <- paste0(nm, "_", lvls)
+    mm <- mm[, -1L, drop = FALSE]
+    dummy_frames[[nm]] <- as.data.frame(mm, check.names = FALSE)
   }
-  out
+  df <- df[, setdiff(names(df), nominal_present), drop = FALSE]
+  if (length(dummy_frames)) df <- cbind(df, do.call(cbind, dummy_frames))
 }
 
-processed_path <- file.path(
-  root, "data", "processed", "meps_fyc_2019_2023_pooled_for_modeling_processed.parquet"
-)
-
-if (file.exists(processed_path)) {
-  ref_cols <- names(read_parquet(processed_path, as_data_frame = TRUE))
-  protected <- c("TOTEXP", "TOTEXP_LOG1P", "FYC_YEAR")
-  ref_predictors <- setdiff(ref_cols, protected)
-  ref_type <- "processed_predictor_schema"
-  message("Reference features: processed predictor schema (", length(ref_predictors), " columns)")
-} else {
-  ref_predictors <- setdiff(build_harmonized_union(root, year_map), "TOTEXP")
-  ref_type <- "harmonized_union_fallback"
-  message("Reference features: harmonized union fallback (", length(ref_predictors), " columns)")
+remaining_cat <- intersect(categorical_cols, names(df))
+remaining_cat <- setdiff(remaining_cat, c(PROTECTED, nominal_present))
+cat_with_na <- remaining_cat[vapply(remaining_cat, function(nm) anyNA(df[[nm]]), logical(1L))]
+if (length(cat_with_na)) {
+  for (nm in cat_with_na) df[[nm]] <- recode_na_to_new_level(df[[nm]])
 }
 
-# Ensure person identifiers are not part of prediction features.
-ref_predictors <- setdiff(ref_predictors, c("DUID", "PID", "DUPERSID"))
-
-if (!length(ref_predictors))
-  stop("Could not build reference feature set.")
-
-test_df <- as.data.frame(read_excel(TEST_XLSX))
-orig_names <- names(test_df)
-
-if (!nzchar(FORCE_YEAR_YY)) {
-  candidates <- year_map$yy
-} else {
-  if (!FORCE_YEAR_YY %in% year_map$yy)
-    stop("FORCE_YEAR_YY must be one of: ", paste(year_map$yy, collapse = ", "))
-  candidates <- FORCE_YEAR_YY
-}
-
-best <- list(yy = NA_character_, n_match = -1L, names = orig_names)
-for (yy in candidates) {
-  tmp <- test_df
-  tmp <- meps_harmonize_names(tmp, yy)
-  nm <- names(tmp)
-  n_match <- sum(nm %in% ref_predictors)
-  if (n_match > best$n_match) {
-    best$yy <- yy
-    best$n_match <- n_match
-    best$names <- nm
-  }
-}
-
-names(test_df) <- best$names
-
-# Keep first occurrence if harmonization causes accidental duplicates.
-if (anyDuplicated(names(test_df))) {
-  keep <- !duplicated(names(test_df))
-  test_df <- test_df[, keep, drop = FALSE]
-}
-
-match_mask <- names(test_df) %in% ref_predictors
-matched_cols <- names(test_df)[match_mask]
-missing_cols <- setdiff(ref_predictors, matched_cols)
-extra_cols <- setdiff(names(test_df), ref_predictors)
-
-pred_df <- test_df[, intersect(ref_predictors, names(test_df)), drop = FALSE]
-if (length(missing_cols)) {
-  for (nm in missing_cols) pred_df[[nm]] <- NA
-}
-pred_df <- pred_df[, ref_predictors, drop = FALSE]
+num_mask <- vapply(df, is.numeric, logical(1L))
+vars_num <- vapply(df[num_mask], var, numeric(1L), na.rm = TRUE)
+zv_cols <- setdiff(names(vars_num)[vars_num == 0 | is.na(vars_num)], PROTECTED)
+if (length(zv_cols)) df <- df[, setdiff(names(df), zv_cols), drop = FALSE]
 
 dir.create(dirname(OUT_PARQUET), recursive = TRUE, showWarnings = FALSE)
-write_parquet(pred_df, OUT_PARQUET)
-write.csv(pred_df, OUT_CSV, row.names = FALSE)
+write_parquet(df, OUT_PARQUET)
+write.csv(df, OUT_CSV, row.names = FALSE)
 
 manifest <- list(
   input_file = normalizePath(TEST_XLSX, winslash = "/", mustWork = TRUE),
   output_parquet = normalizePath(OUT_PARQUET, winslash = "/", mustWork = FALSE),
   output_csv = normalizePath(OUT_CSV, winslash = "/", mustWork = FALSE),
-  harmonize_year_suffix_used = best$yy,
-  reference_type = ref_type,
-  input_columns = length(orig_names),
-  matched_columns = length(matched_cols),
-  unmatched_input_columns = length(extra_cols),
-  missing_reference_columns_filled_na = length(missing_cols),
-  output_columns = ncol(pred_df)
+  harmonize_year_suffix_used = yy,
+  input_columns = orig_ncols,
+  output_columns = ncol(df),
+  rows = nrow(df),
+  processing = "01_clean + 03_process style"
 )
-
-manifest_path <- file.path(dirname(OUT_PARQUET), "test_for_prediction_manifest.json")
-jsonlite::write_json(manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE)
+if (requireNamespace("jsonlite", quietly = TRUE)) {
+  jsonlite::write_json(manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE)
+}
 
 message("\nDone.")
-message("  Input columns:                ", length(orig_names))
-message("  Matched reference columns:    ", length(matched_cols))
-message("  Unmatched input columns:      ", length(extra_cols))
-message("  Missing ref cols filled with NA: ", length(missing_cols))
-message("  Harmonize suffix selected:    ", best$yy)
+message("  Input columns: ", orig_ncols)
+message("  Output columns: ", ncol(df))
+message("  Rows: ", nrow(df))
 message("  Wrote: ", OUT_PARQUET)
 message("  Wrote: ", OUT_CSV)
-message("  Wrote: ", manifest_path)
+if (file.exists(manifest_path)) message("  Wrote: ", manifest_path)
