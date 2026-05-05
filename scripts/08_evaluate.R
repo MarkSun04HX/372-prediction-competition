@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
-# 08_predict_test.R
+# 08_evaluate.R
 # Load the CV-winning model from models/<best_label>/ and predict on harmonized
-# test rows (output of 07_prepare_test_for_prediction.R).
+# test rows (output of 07_prep-test.R).
 #
 # Primary evaluation output (when test.xlsx contains TOTEXP):
 #   RMSLE = RMSE on log1p scale: sqrt(mean((pred_log1p - log1p(TOTEXP))^2)),
@@ -24,8 +24,8 @@
 #   - outputs/predictions/test_predictions_manifest.json
 #
 # Usage:
-#   Rscript scripts/07_prepare_test_for_prediction.R
-#   Rscript scripts/08_predict_test.R
+#   Rscript scripts/07_prep-test.R
+#   Rscript scripts/08_evaluate.R
 #
 # Env:
 #   BEST_MODEL          optional; if set, use models/<BEST_MODEL>/ instead of CSV
@@ -144,7 +144,7 @@ if (!file.exists(PROCESSED_PATH))
 if (!file.exists(TEST_PARQUET))
   stop(
     "Harmonized test parquet not found — run script 07 first:\n  ", TEST_PARQUET,
-    "\n  Rscript scripts/07_prepare_test_for_prediction.R"
+    "\n  Rscript scripts/07_prep-test.R"
   )
 
 # ---- Best model directory ----------------------------------------------------

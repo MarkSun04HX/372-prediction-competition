@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# 07_prepare_test_for_prediction.R
+# 07_prep-test.R
 #
 # Prepare `test.xlsx` using the same transformation logic as training:
 #   - 01_clean-data.R style: sentinel recode, drop IDs/strings, harmonize names
@@ -7,7 +7,7 @@
 #     levels, drop zero-variance columns, add TOTEXP_LOG1P
 #
 # Usage:
-#   Rscript scripts/07_prepare_test_for_prediction.R
+#   Rscript scripts/07_prep-test.R
 #
 # Env vars:
 #   TEST_XLSX      input xlsx path (default: test.xlsx)
