@@ -1,0 +1,2 @@
+"best_model","cv_rmsle","is_two_part","model_dir"
+"xgboost",1.56021357714986,FALSE,"/deac/ecn/classes/ecn372-sp-2026/reny23/372-prediction-competition/models/xgboost"

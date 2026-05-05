@@ -715,6 +715,26 @@
 
 ---
 
+## 2026-05-05 — Fix test set cleaning pipeline (scripts 07 + 03 + src helper)
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Inspect scripts 07 and 08 — is `test.xlsx` cleaned the same way as training data? Then implement a fix so `make evaluate` applies identical preprocessing to the test set as to the training set.
+- **Output summary:** Identified three cleaning mismatches between the training pipeline (scripts 01 + 03) and the test prep script (07): (1) `meps_recode_sentinels()` was never called on test data (sentinel codes -1/-7/-8/-9/-15 survived as literal predictor values); (2) nominal variables were not one-hot encoded (dummy columns like `REGION_2` were filled as all-zero instead of being properly derived); (3) non-nominal categorical NA values were filled with training median instead of the `max+1` sentinel level used during training. Promoted `recode_na_to_new_level()` from a local definition in `03_process-data.R` to a shared helper in `src/exclude_variables.R`; removed the now-redundant local copy from `03`. Rewrote the test data processing section of `scripts/07_prepare_test_for_prediction.R` in the correct order: (A) sentinel recoding, (B) year-suffix detection + column harmonization, (C) load pooled training parquet + derive encoding parameters, (D) one-hot encode nominal variables using exact training levels, (E) recode NA in non-nominal categorical columns to training max+1.
+- **What I used:** `src/exclude_variables.R`, `scripts/01_clean-data.R`, `scripts/03_process-data.R`, `scripts/07_prepare_test_for_prediction.R`, `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet` (as encoding parameter source).
+- **Verification:** Lints checked on all three edited files — only pre-existing false-positive NSE warnings remain; no new errors introduced.
+
+---
+
+## 2026-05-05 — Re-apply 07 fix after collaborator's version pulled
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Re-apply the test set cleaning fix to script 07 after a git pull brought in the collaborator's rewritten version.
+- **Output summary:** Collaborator's version of `07_prepare_test_for_prediction.R` already had the right structure (sentinel recoding, one-hot encoding, NA→max+1) but derived all encoding parameters (n_unique split, levels, max values) from the test data itself rather than the training data. Fixed the 03-style processing section to load the pooled training parquet (`meps_fyc_2019_2023_pooled_for_modeling.parquet`), apply `meps_recode_sentinels()` to it, then derive: (1) continuous vs categorical split from training n_unique; (2) which continuous columns to drop (those with NA in training); (3) one-hot levels per nominal variable from training; (4) max+1 NA sentinel per non-nominal categorical from training. Also removed the local `recode_na_to_new_level()` definition (now shared in `src/exclude_variables.R`). `src/exclude_variables.R` and `scripts/03_process-data.R` were already correct from the previous session.
+- **What I used:** `src/exclude_variables.R`, `scripts/03_process-data.R`, `scripts/07_prepare_test_for_prediction.R`, `data/processed/meps_fyc_2019_2023_pooled_for_modeling.parquet`.
+- **Verification:** `ReadLints` on the edited file — no errors.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
