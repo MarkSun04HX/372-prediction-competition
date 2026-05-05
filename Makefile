@@ -1,4 +1,4 @@
-.PHONY: install clean eda process data cv cv-local train train-local predict predict-local
+.PHONY: install clean eda process data cv cv-local train train-local evaluate
 
 # Install all required R packages (run once before anything else).
 install:
@@ -44,10 +44,7 @@ train:
 train-local:
 	Rscript scripts/06_train_best.R
 
-# Predict on harmonized test (08). Requires: script 07 output + models/ from train(-local).
-predict:
-	Rscript scripts/08_predict_test.R
-
-# Prepare test.xlsx (07) then predict (08).
-predict-local:
-	Rscript scripts/07_prepare_test_for_prediction.R && Rscript scripts/08_predict_test.R
+# Prep test.xlsx (07) then run model and write RMSLE (08).
+# Requires: make data + make train-local (or make train on HPC)
+evaluate:
+	Rscript scripts/07_prep-test.R && Rscript scripts/08_evaluate.R
