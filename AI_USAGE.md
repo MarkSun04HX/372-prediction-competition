@@ -765,6 +765,16 @@
 
 ---
 
+## 2026-05-05 — Generalize year suffix handling for any MEPS FYC year
+
+- **Tool:** Cursor Agent
+- **Prompt:** Dropped full 2018 MEPS FYC data as test set; script failed to find TOTEXP because the column is named TOTEXP18 and the year suffix was hardcoded to "19".
+- **Output summary:** Fixed `scripts/07_prep-test.R` and `scripts/08_evaluate.R` to handle arbitrary MEPS FYC years automatically. Three layered bugs were fixed: (1) added `.detect_meps_yy()` that scans column names for the dominant 2-digit year suffix (range 10–29, skipping round codes 31/42/53), prioritizing it over any stale manifest value; (2) moved the `TOTEXP` existence check to after `meps_harmonize_names()` so `TOTEXP18` is renamed before the check; (3) protected the year-suffixed `TOTEXP{yy}` column from the exclusion drop, and passed the detected year to `meps_expanded_exclusion_names()` to cover year-specific expenditure/weight columns. In `08_evaluate.R`, removed the hardcoded `c("19","20","21","22","23")` allowlist in `.read_actual_totexp` and replaced the scan loop with the full 10–29 range.
+- **What I used:** Modified `scripts/07_prep-test.R` (year detection, exclusion drop protection, TOTEXP check order) and `scripts/08_evaluate.R` (TOTEXP reading function).
+- **Verification:** `make evaluate` on 2018 full FYC (30,461 rows) — `Auto-detected year suffix yy=18`, no warnings, RMSLE 1.559 printed to terminal.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

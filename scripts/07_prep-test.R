@@ -15,7 +15,7 @@
 #                  (default: data/processed/test_for_prediction_processed.parquet)
 #   OUT_CSV        output csv path
 #                  (default: data/processed/test_for_prediction_processed.csv)
-#   FORCE_YEAR_YY  optional year suffix for harmonization: 19|20|21|22|23
+#   FORCE_YEAR_YY  override year suffix (e.g. 18, 19 … 23); auto-detected if omitted
 
 suppressPackageStartupMessages({
   library(arrow)
@@ -75,23 +75,48 @@ if (!nzchar(FORCE_YEAR_YY) && file.exists(manifest_path) &&
   manifest_yy <- as.character(man$harmonize_year_suffix_used)
 }
 
+# Read the file first so we can auto-detect the year from column names.
+df <- as.data.frame(read_excel(TEST_XLSX))
+orig_ncols <- ncol(df)
+
+# Infer 2-digit FYC year suffix from column names (e.g. TOTEXP18 -> "18").
+# Ignores round-based suffixes (31, 42, 53); only considers FYC range 10-29.
+.detect_meps_yy <- function(col_names) {
+  m <- grep("[A-Z][A-Z0-9]*[0-9]{2}[XF]?$", col_names, value = TRUE)
+  if (!length(m)) return(NULL)
+  digits <- sub(".*([0-9]{2})[XF]?$", "\\1", m)
+  digits <- digits[!digits %in% c("31", "42", "53") &
+                     as.integer(digits) >= 10L &
+                     as.integer(digits) <= 29L]
+  if (!length(digits)) return(NULL)
+  names(sort(table(digits), decreasing = TRUE))[1]
+}
+
+# Priority: FORCE_YEAR_YY > auto-detect from columns > previous manifest > "19"
 yy <- FORCE_YEAR_YY
-if (!nzchar(yy) && !is.na(manifest_yy) && nzchar(manifest_yy)) yy <- manifest_yy
-if (!nzchar(yy)) yy <- "19"
+if (!nzchar(yy)) {
+  detected <- .detect_meps_yy(names(df))
+  if (!is.null(detected)) {
+    yy <- detected
+    message("Auto-detected year suffix yy=", yy, " from column names.")
+  }
+}
+if (!nzchar(yy) && !is.na(manifest_yy) && nzchar(manifest_yy)) {
+  yy <- manifest_yy
+  message("Using year suffix yy=", yy, " from previous manifest (no suffix columns found).")
+}
+if (!nzchar(yy)) {
+  yy <- "19"
+  message("Could not detect year suffix; defaulting to yy=19.")
+}
 year_val <- as.integer(paste0("20", yy))
 
 message("Using harmonization yy=", yy, " (FYC_YEAR=", year_val, ")")
 
-df <- as.data.frame(read_excel(TEST_XLSX))
-orig_ncols <- ncol(df)
-
-if (!("TOTEXP" %in% names(df))) {
-  warning("TOTEXP not found in test.xlsx. Creating TOTEXP=NA.")
-  df$TOTEXP <- NA_real_
-}
-
 # ---- 01-style steps ---------------------------------------------------------
-exclusions <- meps_expanded_exclusion_names()
+# Include the test year in the exclusion list so year-suffixed expenditure/
+# weight columns (e.g. TOTSLF18, PERWT18F) are dropped for any test year.
+exclusions <- meps_expanded_exclusion_names(yy = unique(c(yy, meps_default_yy())))
 df <- meps_recode_sentinels(df)
 df[] <- lapply(df, function(x) {
   if (inherits(x, "labelled")) as.numeric(haven::zap_labels(x)) else x
@@ -101,12 +126,21 @@ df <- df[, setdiff(names(df), c("DUID", "PID")), drop = FALSE]
 char_cols <- names(df)[vapply(df, is.character, logical(1L))]
 if (length(char_cols)) df <- df[, setdiff(names(df), char_cols), drop = FALSE]
 
-to_drop <- setdiff(intersect(names(df), exclusions), "TOTEXP")
+# Protect both the harmonized name ("TOTEXP") and the year-suffixed raw name
+# ("TOTEXP18") so the column survives the drop and gets renamed by harmonization.
+totexp_protected <- c("TOTEXP", paste0("TOTEXP", yy))
+to_drop <- setdiff(intersect(names(df), exclusions), totexp_protected)
 if (length(to_drop)) df <- df[, setdiff(names(df), to_drop), drop = FALSE]
 
 df <- meps_harmonize_names(df, yy)
 if (anyDuplicated(names(df))) df <- df[, !duplicated(names(df)), drop = FALSE]
 df$FYC_YEAR <- year_val
+
+# Check for TOTEXP after harmonization — TOTEXP18 becomes TOTEXP once yy=18 is applied.
+if (!("TOTEXP" %in% names(df))) {
+  warning("TOTEXP not found after harmonization. Creating TOTEXP=NA.")
+  df$TOTEXP <- NA_real_
+}
 
 # ---- 03-style steps (encoding parameters derived from training data) ---------
 # All continuous/categorical splits, one-hot levels, and NA sentinels must come

@@ -100,7 +100,7 @@ OUT_PRED <- Sys.getenv(
       harmonize_yy = NA_character_
     ))
   }
-  if (!is.na(yy_hint) && nzchar(yy_hint) && yy_hint %in% c("19", "20", "21", "22", "23")) {
+  if (!is.na(yy_hint) && nzchar(yy_hint)) {
     raw2 <- tryCatch(meps_harmonize_names(raw, yy_hint), error = function(e) NULL)
     if (!is.null(raw2) && "TOTEXP" %in% names(raw2)) {
       return(list(
@@ -113,7 +113,8 @@ OUT_PRED <- Sys.getenv(
   best_v <- NULL
   best_n <- -1L
   best_yy <- NA_character_
-  for (yy in c("19", "20", "21", "22", "23")) {
+  scan_yys <- sprintf("%02d", 10:29)
+  for (yy in scan_yys) {
     raw2 <- tryCatch(meps_harmonize_names(raw, yy), error = function(e) NULL)
     if (!is.null(raw2) && "TOTEXP" %in% names(raw2)) {
       v <- suppressWarnings(as.numeric(raw2$TOTEXP))
