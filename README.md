@@ -7,7 +7,11 @@ scripts/
   01_clean-data.R        Raw Stata → exclusions → pool → parquet
   02_eda.R               Variable stats, missingness report, target plot
   03_process-data.R      Categorical encoding, NA handling → processed parquet
-  04_model-comparison.R  5-fold CV 
+  04_model-comparison.R  5-fold CV
+  05_combine_cv.R        Combine per-model CV results → leaderboard
+  06_train_best.R        Fit best model on full data → models/
+  07_prep-test.R         Clean test.xlsx using training encoding parameters
+  08_evaluate.R          Apply model to test set → RMSLE + predictions
 
 src/
   exclude_variables.R
@@ -36,8 +40,11 @@ slurm/
 | `make eda` | `02` — EDA summaries |
 | `make process` | `03` — processed parquet |
 | `make data` | `01` → `02` → `03` |
-| `make train` | SLURM array (cluster only) |
-| `make train-local` | `04` locally |
+| `make cv` | `04` + `05` — SLURM array (cluster only) |
+| `make cv-local` | `04` + `05` locally |
+| `make train` | `06` — SLURM (cluster only) |
+| `make train-local` | `06` locally |
+| `make evaluate` | `07` + `08` — prep test set, run model, write RMSLE |
 
 ---
 

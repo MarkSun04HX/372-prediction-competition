@@ -735,6 +735,16 @@
 
 ---
 
+## 2026-05-05 — Rename scripts 07/08 and Makefile targets
+
+- **Tool:** Cursor Agent
+- **Prompt:** (Paraphrased) Rename 07 and 08 to shorter names following the repo style; collapse the redundant `predict` and `predict-local` Makefile targets into a single `make evaluate`; update README.
+- **Output summary:** `git mv scripts/07_prepare_test_for_prediction.R scripts/07_prep-test.R` and `git mv scripts/08_predict_test.R scripts/08_evaluate.R`. Removed `predict` and `predict-local` from `.PHONY` and as targets (both ran R scripts locally — the `-local` suffix had no SLURM counterpart and was meaningless). Added single `evaluate` target running `07_prep-test.R && 08_evaluate.R`. Updated internal header comments and the usage error message in `08_evaluate.R`. Expanded README scripts tree to list all 8 scripts with one-line descriptions and updated the Makefile target table with all targets including the new `evaluate` row.
+- **What I used:** `Makefile`, `scripts/07_prep-test.R`, `scripts/08_evaluate.R`, `README.md`.
+- **Verification:** `git status` confirms both renames tracked; Makefile and README verified by read.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).
