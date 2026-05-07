@@ -48,6 +48,17 @@ slurm/
 
 ---
 
+## Reproducing the environment
+
+Package versions are pinned in `renv.lock` (managed by [renv](https://rstudio.github.io/renv/)).
+
+**First-time setup:**
+```r
+install.packages("renv")
+renv::restore()   
+```
+---
+
 ## Prediction
 
 1. Drop `model.rds` into `models/xgboost/` 

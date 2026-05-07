@@ -775,6 +775,16 @@
 
 ---
 
+## 2026-05-07 — Add renv for reproducible dependency pinning
+
+- **Tool:** Cursor Agent
+- **Prompt:** Resolve the reviewer comment that package versions are unpinned; add renv without modifying any existing pipeline scripts.
+- **Output summary:** Initialized `renv` with `renv::init(bare = TRUE)`, ran `renv::hydrate()` to copy 135 packages from the system library into the renv project library, then `renv::snapshot()` to write `renv.lock` with exact CRAN versions and R 4.5.2 recorded. Excluded `catboost`, `BiocManager`, and `BiocVersion` (non-CRAN / Bioconductor internals). Also: added `readxl` to the `pkgs` vector in `src/install_packages.R` (it was used but unlisted), added a top-of-file renv usage note to that script, added renv library paths to `.gitignore`, and added a "Reproducing the environment" section to `README.md`.
+- **What I used:** `renv::init()`, `renv::hydrate()`, `renv::snapshot()`, `renv::settings$ignored.packages()`.
+- **Verification:** `renv::status()` reports "No issues found — the project is in a consistent state." `renv.lock` contains 136 entries (135 packages + renv itself). No existing `.R` scripts were modified.
+
+---
+
 ## Principles (ongoing)
 
 - Check AI suggestions for **feature inclusion** against the MEPS codebook and competition rules (especially **Section 2.5.11**).

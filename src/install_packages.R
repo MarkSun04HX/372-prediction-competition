@@ -1,6 +1,12 @@
 # src/install_packages.R
 # Check and install all R packages required by this project.
-# Source this file or run it directly before running any pipeline script.
+#
+# NOTE: renv is the primary dependency management method for this project.
+# If you have renv available, prefer:
+#   renv::restore()   # installs all packages at the exact pinned versions in renv.lock
+#
+# This script is a fallback for environments where renv is not available or
+# when setting up renv itself for the first time.
 #
 # Usage:
 #   Rscript src/install_packages.R
@@ -18,6 +24,7 @@ pkgs <- c(
   "rpart",       # regression trees
   "ggplot2",     # EDA plots
   "jsonlite",    # JSON manifest files
+  "readxl",      # read .xlsx test file (07_prep-test.R, 08_evaluate.R)
   # tidymodels ecosystem
   "tidymodels",  # meta-package: rsample, recipes, parsnip, tune, yardstick, dials, workflows
   "bonsai",      # LightGBM engine for parsnip (boost_tree with engine = "lightgbm")

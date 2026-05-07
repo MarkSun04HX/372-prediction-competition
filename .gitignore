@@ -7,3 +7,12 @@ codebooks/
 
 # Editor
 .DS_Store
+
+# renv: commit renv.lock, renv/activate.R, and renv/settings.json
+# but ignore the local package library and other generated dirs
+renv/library/
+renv/local/
+renv/cellar/
+renv/python/
+renv/sandbox/
+renv/staging/
