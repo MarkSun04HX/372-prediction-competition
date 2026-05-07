@@ -18,16 +18,15 @@ src/
   install_packages.R
   cv_plots.R
 
+models/
+  xgboost/               Drop model.rds here 
+
 data/
   raw/
   processed/
 
 outputs/
-  eda/
-  figures/
 
-codebooks/
-config/
 slurm/
 ```
 
