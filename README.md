@@ -1,5 +1,20 @@
 # ECN 372 Prediction Competition
 
+Wake Forest **ECN 372-B** — group coursework for a **MEPS** expenditure prediction competition (**R**, **renv**, **GNU make**, optional **SLURM** on the cluster).
+
+**Repository:** [github.com/MarkSun04HX/372-prediction-competition](https://github.com/MarkSun04HX/372-prediction-competition)
+
+## Quick start
+
+1. Install **R** (4.x recommended) and **GNU make**.
+2. In R: `install.packages("renv"); renv::restore()` (see below).
+3. One-time packages used by scripts: `make install`.
+4. Build processed data: `make data` (runs `01` → `02` → `03`).
+5. Cross-validate models locally: `make cv-local` (slow). On the HPC: `make cv` then `make train` when jobs finish.
+6. Drop `model.rds` into `models/xgboost/`, place **`test.xlsx`** in the repo root, then `make evaluate`.
+
+Do **not** commit `test.xlsx` or `models/xgboost/*.rds` (see `.gitignore`).
+
 ## Repo structure
 
 ```
@@ -111,3 +126,7 @@ XGBoost was selected as the final model based on the lowest mean RMSLE. The two-
 ## AI usage
 
 See `AI_USAGE.md` for a dated log of all substantive AI-assisted work.
+
+## License
+
+Code in this repository is released under the [MIT License](LICENSE) unless a file states otherwise.

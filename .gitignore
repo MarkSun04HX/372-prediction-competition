@@ -5,6 +5,16 @@ slurm_logs/
 config/
 codebooks/
 
+# Competition / local artifacts (do not commit holdout labels or fitted models)
+test.xlsx
+models/xgboost/*.rds
+
+# R session junk
+.Rhistory
+.RData
+.Ruserdata
+*~
+
 # Editor
 .DS_Store
 
